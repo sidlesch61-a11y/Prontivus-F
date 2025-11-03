@@ -1,0 +1,10 @@
+{
+  "build": {
+    "env": {
+      "TAILWIND_DISABLE_LIGHTNINGCSS": "1",
+      "NEXT_DISABLE_TURBOPACK": "1"
+    }
+  }
+}
+
+
