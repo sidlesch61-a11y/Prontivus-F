@@ -4,7 +4,7 @@
  */
 
 import { designTokens, type DesignTokens } from './design-tokens';
-import { colors, colorTokens } from './colors';
+import { HEALTHCARE_COLORS } from './colors';
 
 /**
  * Get spacing value from design tokens
@@ -51,7 +51,7 @@ export const ds = {
   layout: designTokens.layout,
   transitions: designTokens.transitions,
   zIndex: designTokens.zIndex,
-  colors: colorTokens,
+  colors: HEALTHCARE_COLORS,
 } as const;
 
 /**

@@ -52,6 +52,7 @@ const CHART_COLORS = {
   softBlue1: '#c7e2ff',   // Very light soft blue
   softBlue2: '#e0efff',  // Extremely light soft blue
   green: '#4ade80',       // Soft green for success
+  purple: '#a78bfa',      // Soft purple for variety
   danger: '#ef4444',      // Keep red for errors/warnings
 };
 
