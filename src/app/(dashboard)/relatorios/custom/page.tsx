@@ -2,15 +2,67 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Separator } from '@/components/ui/separator';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { 
+  Loader2, 
+  FileText, 
+  Download, 
+  Play, 
+  Settings, 
+  Calendar, 
+  Filter,
+  AlertCircle,
+  CheckCircle2,
+  Database,
+  BarChart3,
+  Activity,
+  DollarSign,
+  Stethoscope,
+  Clock,
+  RefreshCw
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 type Domain = 'appointments' | 'financial' | 'clinical';
+
+const PERIOD_OPTIONS = [
+  { value: 'last_7_days', label: 'Últimos 7 dias' },
+  { value: 'last_30_days', label: 'Últimos 30 dias' },
+  { value: 'last_month', label: 'Mês passado' },
+  { value: 'last_3_months', label: 'Últimos 3 meses' },
+  { value: 'last_year', label: 'Último ano' },
+];
+
+const DOMAIN_OPTIONS = [
+  { value: 'appointments' as Domain, label: 'Consultas', icon: Calendar, color: 'blue' },
+  { value: 'financial' as Domain, label: 'Financeiro', icon: DollarSign, color: 'emerald' },
+  { value: 'clinical' as Domain, label: 'Clínico', icon: Stethoscope, color: 'purple' },
+];
+
+const GROUP_LABELS: Record<string, string> = {
+  'status': 'Status',
+  'doctor': 'Médico',
+  'service': 'Serviço',
+  'cid10': 'CID-10'
+};
+
+const COLUMN_LABELS: Record<string, string> = {
+  'status': 'Status',
+  'doctor': 'Médico',
+  'service': 'Serviço',
+  'cid10': 'CID-10',
+  'count': 'Quantidade',
+  'sum_revenue': 'Receita Total (R$)'
+};
 
 export default function CustomReportsPage() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -129,152 +181,275 @@ export default function CustomReportsPage() {
     }
   };
 
+  const currentDomain = DOMAIN_OPTIONS.find(d => d.value === domain);
+  const DomainIcon = currentDomain?.icon || FileText;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Construtor de Relatórios</h1>
-        <div className="flex gap-2">
-          <Button variant="default" onClick={runReport} disabled={loading || groupBy.length === 0}>
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <div className="p-2 bg-gradient-to-br from-violet-600 to-purple-600 rounded-lg text-white shadow-lg">
+              <Settings className="h-6 w-6" />
+            </div>
+            Construtor de Relatórios
+          </h1>
+          <p className="text-muted-foreground">
+            Crie relatórios personalizados com filtros e agrupamentos customizados
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button 
+            variant="default" 
+            onClick={runReport} 
+            disabled={loading || groupBy.length === 0}
+            className="gap-2"
+            size="lg"
+          >
             {loading ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Executando...
               </>
             ) : (
-              'Executar'
+              <>
+                <Play className="h-4 w-4" />
+                Executar Relatório
+              </>
             )}
           </Button>
-          <Button variant="outline" onClick={exportExcel} disabled={!result || result.rows.length === 0}>
+          <Button 
+            variant="outline" 
+            onClick={exportExcel} 
+            disabled={!result || result.rows.length === 0}
+            className="gap-2"
+            size="lg"
+          >
+            <Download className="h-4 w-4" />
             Exportar Excel
           </Button>
         </div>
       </div>
 
+      {/* Configuration Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Configuração</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Configuração do Relatório
+            </CardTitle>
+            <Badge variant="outline" className="gap-1">
+              <Database className="h-3 w-3" />
+              {currentDomain?.label || 'Domínio'}
+            </Badge>
+          </div>
+          <CardDescription>
+            Configure os parâmetros do relatório personalizado
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-4">
-            <div>
-              <div className="text-sm mb-2">Domínio</div>
+          <div className="space-y-6">
+            {/* Domain Selection */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                Domínio
+              </label>
               <Select value={domain} onValueChange={(v) => setDomain(v as Domain)}>
-                <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 w-full sm:w-[280px]">
+                  <DomainIcon className="mr-2 h-4 w-4" />
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="appointments">Consultas</SelectItem>
-                  <SelectItem value="financial">Financeiro</SelectItem>
-                  <SelectItem value="clinical">Clínico</SelectItem>
+                  {DOMAIN_OPTIONS.map((option) => {
+                    const Icon = option.icon;
+                    return (
+                      <SelectItem key={option.value} value={option.value}>
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
+                          {option.label}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <div className="text-sm mb-2">Período</div>
+
+            <Separator />
+
+            {/* Period Selection */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Período
+              </label>
               <Select value={period} onValueChange={setPeriod}>
-                <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 w-full sm:w-[280px]">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="last_7_days">Últimos 7 dias</SelectItem>
-                  <SelectItem value="last_30_days">Últimos 30 dias</SelectItem>
-                  <SelectItem value="last_month">Mês passado</SelectItem>
-                  <SelectItem value="last_3_months">Últimos 3 meses</SelectItem>
-                  <SelectItem value="last_year">Último ano</SelectItem>
+                  {PERIOD_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <div className="text-sm mb-2">Agrupar por</div>
-              <div className="flex gap-2 flex-wrap">
-                {availableGroups.map(g => {
-                  const labels: Record<string, string> = {
-                    'status': 'Status',
-                    'doctor': 'Médico',
-                    'service': 'Serviço',
-                    'cid10': 'CID-10'
-                  };
-                  return (
-                    <Button 
-                      key={g} 
-                      variant={groupBy.includes(g) ? 'default' : 'outline'} 
-                      onClick={() => toggleGroup(g)}
-                    >
-                      {labels[g] || g}
-                    </Button>
-                  );
-                })}
+
+            <Separator />
+
+            {/* Group By Selection */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Filter className="h-4 w-4" />
+                Agrupar por <span className="text-red-500">*</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {availableGroups.map(g => (
+                  <Button 
+                    key={g} 
+                    variant={groupBy.includes(g) ? 'default' : 'outline'} 
+                    onClick={() => toggleGroup(g)}
+                    className={cn(
+                      "gap-2",
+                      groupBy.includes(g) && "shadow-sm"
+                    )}
+                  >
+                    {groupBy.includes(g) && <CheckCircle2 className="h-4 w-4" />}
+                    {GROUP_LABELS[g] || g}
+                  </Button>
+                ))}
               </div>
+              {groupBy.length === 0 && (
+                <p className="text-xs text-red-600 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  Selecione pelo menos uma opção para agrupar
+                </p>
+              )}
+              {groupBy.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {groupBy.length} {groupBy.length === 1 ? 'opção selecionada' : 'opções selecionadas'}
+                </p>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* Error State */}
       {error && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-6">
-            <p className="text-red-600">{error}</p>
+        <Card className="border-l-4 border-l-red-500">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="h-5 w-5" />
+              Erro ao Gerar Relatório
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <Button onClick={runReport} variant="outline" className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Tentar novamente
+            </Button>
           </CardContent>
         </Card>
       )}
 
+      {/* Loading State */}
       {loading && (
-        <div className="flex items-center justify-center h-40">
-          <div className="flex flex-col items-center gap-2">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground">Gerando relatório...</p>
-          </div>
-        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <div className="rounded-full bg-muted p-4 mb-4">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+            <p className="text-sm font-medium mb-1">Gerando relatório...</p>
+            <p className="text-xs text-muted-foreground">
+              Isso pode levar alguns segundos
+            </p>
+          </CardContent>
+        </Card>
       )}
 
+      {/* Results */}
       {result && result.rows.length > 0 && (
-        <Card>
+        <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
-            <CardTitle>Resultado</CardTitle>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-violet-600" />
+                  Resultado do Relatório
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Dados agrupados conforme a configuração selecionada
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="gap-1">
+                <Database className="h-3 w-3" />
+                {result.rows.length} {result.rows.length === 1 ? 'registro' : 'registros'}
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="mb-4 text-sm text-muted-foreground">
-              Total de registros: {result.rows.length}
+            <div className="rounded-lg border overflow-hidden">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      {result.columns.map(col => (
+                        <TableHead key={col} className="font-semibold">
+                          {COLUMN_LABELS[col] || col}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {result.rows.map((row, idx) => (
+                      <TableRow key={idx} className="hover:bg-muted/50 transition-colors">
+                        {result.columns.map(col => {
+                          let value = row[col] ?? '';
+                          if (col === 'sum_revenue' && typeof value === 'number') {
+                            value = new Intl.NumberFormat('pt-BR', {
+                              style: 'currency',
+                              currency: 'BRL'
+                            }).format(value);
+                          }
+                          return (
+                            <TableCell key={col} className="font-medium">
+                              {String(value)}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    {result.columns.map(col => {
-                      const columnLabels: Record<string, string> = {
-                        'status': 'Status',
-                        'doctor': 'Médico',
-                        'service': 'Serviço',
-                        'cid10': 'CID-10',
-                        'count': 'Quantidade',
-                        'sum_revenue': 'Receita Total (R$)'
-                      };
-                      return (
-                        <th key={col} className="text-left p-3 font-semibold">
-                          {columnLabels[col] || col}
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.rows.map((row, idx) => (
-                    <tr key={idx} className="border-b hover:bg-muted/30">
-                      {result.columns.map(col => {
-                        let value = row[col] ?? '';
-                        if (col === 'sum_revenue' && typeof value === 'number') {
-                          value = new Intl.NumberFormat('pt-BR', {
-                            style: 'currency',
-                            currency: 'BRL'
-                          }).format(value);
-                        }
-                        return (
-                          <td key={col} className="p-3">
-                            {String(value)}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Empty Result State */}
+      {result && result.rows.length === 0 && !loading && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <div className="rounded-full bg-muted p-4 mb-4">
+              <Database className="h-8 w-8 text-muted-foreground" />
             </div>
+            <h3 className="text-lg font-semibold mb-2">Nenhum dado encontrado</h3>
+            <p className="text-sm text-muted-foreground text-center max-w-sm mb-4">
+              Não há registros para os filtros selecionados. Tente ajustar o período ou os critérios de agrupamento.
+            </p>
+            <Button variant="outline" onClick={runReport} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Tentar novamente
+            </Button>
           </CardContent>
         </Card>
       )}

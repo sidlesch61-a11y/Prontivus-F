@@ -32,14 +32,16 @@ import {
   Menu,
   X,
   LogOut,
+  User,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { getUserSettings } from "@/lib/settings-api";
 import {
   PatientProfileIcon,
   StethoscopeIcon,
@@ -456,6 +458,36 @@ export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
+
+  // Load user avatar
+  React.useEffect(() => {
+    const loadAvatar = async () => {
+      if (!user) {
+        setAvatarUrl(null);
+        return;
+      }
+
+      try {
+        const settings = await getUserSettings();
+        if (settings.profile.avatar) {
+          let url = settings.profile.avatar;
+          if (url && !url.startsWith('http')) {
+            const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            url = `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+          }
+          setAvatarUrl(url);
+        } else {
+          setAvatarUrl(null);
+        }
+      } catch (error) {
+        console.error('Failed to load avatar:', error);
+        setAvatarUrl(null);
+      }
+    };
+
+    loadAvatar();
+  }, [user]);
   
   if (!user) {
     return null;
@@ -549,21 +581,21 @@ export function AppSidebar() {
         className={cn(
           "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 relative group",
           active
-            ? "bg-white text-[#0F4C75] font-semibold shadow-sm"
+            ? "bg-white text-blue-700 font-semibold shadow-sm"
             : "text-white/90 hover:text-white hover:bg-white/10"
         )}
         onClick={() => setIsMobileMenuOpen(false)}
       >
         {/* Left accent bar for active state */}
         {active && (
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-[#0F4C75] rounded-r-full" />
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-blue-600 rounded-r-full" />
         )}
         
         {/* Icon */}
         <Icon 
           className={cn(
             "h-5 w-5 shrink-0 transition-colors",
-            active ? "text-[#0F4C75]" : "text-white/90 group-hover:text-white"
+            active ? "text-blue-700" : "text-white/90 group-hover:text-white"
           )} 
         />
         
@@ -580,6 +612,26 @@ export function AppSidebar() {
     }
     return user.username[0]?.toUpperCase() || 'U';
   };
+
+  // Get role icon for avatar fallback
+  const getRoleIcon = () => {
+    if (user.role === 'admin') return Shield;
+    if (user.role === 'secretary') return Users;
+    if (user.role === 'doctor') return Stethoscope;
+    if (user.role === 'patient') return UserCheck;
+    return User;
+  };
+
+  // Get role-based avatar fallback styling (for sidebar with dark background) - Softer blues
+  const getRoleAvatarStyle = () => {
+    if (user.role === 'admin') return "bg-blue-400/20 text-blue-200 border-blue-300/30";
+    if (user.role === 'secretary') return "bg-blue-300/20 text-blue-200 border-blue-300/30";
+    if (user.role === 'doctor') return "bg-blue-400/20 text-blue-200 border-blue-300/30";
+    if (user.role === 'patient') return "bg-blue-300/20 text-blue-200 border-blue-300/30";
+    return "bg-white/10 text-white/70 border-white/20";
+  };
+
+  const RoleIcon = getRoleIcon();
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -672,9 +724,14 @@ export function AppSidebar() {
       {/* User Profile Footer */}
       <div className="px-4 py-4 border-t border-white/10 bg-white/5">
         <div className="flex items-center gap-3 mb-3">
-          <Avatar className="h-10 w-10 border-2 border-white/20">
-            <AvatarFallback className="bg-white/10 text-white font-semibold">
-              {getUserInitials()}
+          <Avatar className={cn("h-10 w-10 border-2", getRoleAvatarStyle().split(' ')[2])}>
+            <AvatarImage src={avatarUrl || undefined} alt={user.username} />
+            <AvatarFallback className={cn(getRoleAvatarStyle(), "font-semibold")}>
+              {avatarUrl ? (
+                <User className="h-5 w-5" />
+              ) : (
+                <RoleIcon className="h-5 w-5" />
+              )}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
@@ -722,7 +779,7 @@ export function AppSidebar() {
       {/* Hamburger button */}
       <button
         onClick={() => setIsMobileMenuOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-[#0F4C75] text-white rounded-lg shadow-lg"
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-blue-700 text-white rounded-lg shadow-lg"
         aria-label="Open menu"
       >
         <Menu className="h-6 w-6" />
@@ -738,7 +795,7 @@ export function AppSidebar() {
           />
           
           {/* Sidebar panel */}
-          <div className="lg:hidden fixed inset-y-0 left-0 z-50 w-[280px] bg-[#0F4C75] shadow-2xl transform transition-transform duration-300 ease-in-out">
+          <div className="lg:hidden fixed inset-y-0 left-0 z-50 w-[280px] bg-blue-700 shadow-2xl transform transition-transform duration-300 ease-in-out">
             <div className="flex items-center justify-between p-4 border-b border-white/10">
               <Image
                 src={"/Logo/Prontivus Horizontal Transparents.png"}
@@ -768,7 +825,7 @@ export function AppSidebar() {
       <MobileSidebar />
       
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-full w-[240px] bg-[#0F4C75] z-30 medical-pattern">
+      <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-full w-[240px] bg-blue-700 z-30 medical-pattern">
         <SidebarContent />
       </aside>
     </>

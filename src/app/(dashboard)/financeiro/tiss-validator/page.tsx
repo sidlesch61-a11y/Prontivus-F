@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { 
   Upload, 
   CheckCircle, 
@@ -21,8 +23,17 @@ import {
   AlertTriangle, 
   FileCode,
   Download,
-  Eye
+  Eye,
+  RefreshCw,
+  Shield,
+  FileCheck,
+  FileX,
+  Info,
+  Sparkles,
+  Database,
+  Clipboard
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ValidationResult {
   isValid: boolean;
@@ -196,16 +207,24 @@ export default function TissValidatorPage() {
       }>(`/api/invoices/${selectedInvoiceId}/tiss-xml/validate`);
 
       // Get preview XML to show
-      const xmlResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/invoices/${selectedInvoiceId}/tiss-xml/preview`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('clinicore_access_token')}`,
-        },
-      });
-
       let xmlContent = "";
-      if (xmlResponse.ok) {
-        xmlContent = await xmlResponse.text();
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const token = localStorage.getItem('clinicore_access_token');
+        
+        const response = await fetch(`${API_URL}/api/invoices/${selectedInvoiceId}/tiss-xml/preview`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (response.ok) {
+          xmlContent = await response.text();
+        }
+      } catch (error) {
+        // If preview fails, continue without XML content
+        console.warn("Failed to load XML preview:", error);
       }
 
       const isValid = validationResponse.is_valid || validationResponse.valid || false;
@@ -254,14 +273,23 @@ export default function TissValidatorPage() {
     }
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/invoices/${selectedInvoiceId}/tiss-xml/preview`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const token = localStorage.getItem('clinicore_access_token');
+      
+      const response = await fetch(`${API_URL}/api/invoices/${selectedInvoiceId}/tiss-xml/preview`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('clinicore_access_token')}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
+          return;
+        }
         throw new Error(`Failed to load: ${response.statusText}`);
       }
 
@@ -283,6 +311,7 @@ export default function TissValidatorPage() {
       reader.onload = (e) => {
         const content = e.target?.result as string;
         setXmlContent(content);
+        toast.success("Arquivo XML carregado!");
       };
       reader.readAsText(file);
     }
@@ -300,6 +329,7 @@ export default function TissValidatorPage() {
     a.click();
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+    toast.success("XML baixado com sucesso!");
   };
 
   const previewXml = () => {
@@ -312,8 +342,8 @@ export default function TissValidatorPage() {
           <head>
             <title>TISS XML Preview</title>
             <style>
-              body { font-family: monospace; margin: 20px; }
-              pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }
+              body { font-family: monospace; margin: 20px; background: #f5f5f5; }
+              pre { background: white; padding: 20px; border-radius: 8px; overflow-x: auto; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
             </style>
           </head>
           <body>
@@ -333,41 +363,53 @@ export default function TissValidatorPage() {
     }).format(amount);
   };
 
+  const filteredInvoices = useMemo(() => {
+    return invoices.slice(0, 10);
+  }, [invoices]);
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center gap-2">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Carregando...</p>
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-50 to-blue-50/30">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+          <p className="text-muted-foreground font-medium">Carregando...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-gradient-to-br from-slate-50 to-blue-50/30 min-h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Validador TISS XML</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg text-white shadow-lg">
+              <Shield className="h-5 w-5 sm:h-6 sm:w-6" />
+            </div>
+            Validador TISS XML
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1.5">
             Valide arquivos TISS XML contra o padrão 3.03.00
           </p>
         </div>
       </div>
 
-      {/* Invoice Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Validar Fatura do Banco de Dados</CardTitle>
-          <CardDescription>
+      {/* Invoice Selection Card */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+            <Database className="h-4 w-4 sm:h-5 sm:w-5" />
+            Validar Fatura do Banco de Dados
+          </CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
             Selecione uma fatura para validar seu XML TISS
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <Select value={selectedInvoiceId} onValueChange={setSelectedInvoiceId}>
-              <SelectTrigger className="flex-1">
+              <SelectTrigger className="flex-1 bg-white">
                 <SelectValue placeholder="Selecione uma fatura" />
               </SelectTrigger>
               <SelectContent>
@@ -388,56 +430,78 @@ export default function TissValidatorPage() {
                 )}
               </SelectContent>
             </Select>
-            <Button
-              onClick={loadInvoiceXml}
-              disabled={!selectedInvoiceId || loadingInvoices}
-              variant="outline"
-            >
-              {loadingInvoices ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Eye className="h-4 w-4 mr-2" />}
-              Carregar XML
-            </Button>
-            <Button
-              onClick={validateInvoiceTiss}
-              disabled={!selectedInvoiceId || validatingInvoice || loadingInvoices}
-            >
-              {validatingInvoice ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileCode className="h-4 w-4 mr-2" />}
-              {validatingInvoice ? "Validando..." : "Validar Fatura"}
-            </Button>
-            <Button
-              onClick={loadInvoices}
-              disabled={loadingInvoices}
-              variant="outline"
-            >
-              {loadingInvoices ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-              Atualizar
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={loadInvoiceXml}
+                disabled={!selectedInvoiceId || loadingInvoices}
+                variant="outline"
+                size="sm"
+                className="bg-white"
+              >
+                {loadingInvoices ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Eye className="h-4 w-4 mr-2" />}
+                <span className="hidden sm:inline">Carregar XML</span>
+                <span className="sm:hidden">Carregar</span>
+              </Button>
+              <Button
+                onClick={validateInvoiceTiss}
+                disabled={!selectedInvoiceId || validatingInvoice || loadingInvoices}
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-700"
+              >
+                {validatingInvoice ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileCheck className="h-4 w-4 mr-2" />
+                )}
+                <span className="hidden sm:inline">{validatingInvoice ? "Validando..." : "Validar Fatura"}</span>
+                <span className="sm:hidden">{validatingInvoice ? "..." : "Validar"}</span>
+              </Button>
+              <Button
+                onClick={loadInvoices}
+                disabled={loadingInvoices}
+                variant="outline"
+                size="sm"
+                className="bg-white"
+              >
+                {loadingInvoices ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
 
           {/* Invoices List */}
           {invoices.length > 0 && (
             <div className="mt-4">
-              <h4 className="text-sm font-medium mb-2">Faturas Disponíveis ({invoices.length})</h4>
-              <div className="border rounded-lg max-h-64 overflow-auto">
+              <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                <Clipboard className="h-4 w-4" />
+                Faturas Disponíveis ({invoices.length})
+              </h4>
+              <div className="border rounded-lg max-h-64 overflow-auto bg-white">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Paciente</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Ações</TableHead>
+                      <TableHead className="min-w-[80px]">ID</TableHead>
+                      <TableHead className="min-w-[150px]">Paciente</TableHead>
+                      <TableHead className="hidden md:table-cell min-w-[100px]">Data</TableHead>
+                      <TableHead className="min-w-[100px]">Valor</TableHead>
+                      <TableHead className="hidden lg:table-cell min-w-[100px]">Status</TableHead>
+                      <TableHead className="text-right min-w-[100px]">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {invoices.slice(0, 10).map((invoice) => (
-                      <TableRow key={invoice.id}>
+                    {filteredInvoices.map((invoice) => (
+                      <TableRow key={invoice.id} className="hover:bg-slate-50 transition-colors">
                         <TableCell className="font-medium">#{invoice.id}</TableCell>
-                        <TableCell>{invoice.patient_name || '-'}</TableCell>
-                        <TableCell>{format(new Date(invoice.issue_date), "dd/MM/yyyy")}</TableCell>
-                        <TableCell>{formatCurrency(invoice.total_amount)}</TableCell>
-                        <TableCell>
-                          <Badge variant={invoice.status === 'paid' ? 'default' : 'secondary'}>
+                        <TableCell className="truncate max-w-[150px]">{invoice.patient_name || '-'}</TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {format(new Date(invoice.issue_date), "dd/MM/yyyy", { locale: ptBR })}
+                        </TableCell>
+                        <TableCell className="font-medium">{formatCurrency(invoice.total_amount)}</TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <Badge variant={invoice.status === 'paid' ? 'default' : 'secondary'} className="text-xs">
                             {invoice.status}
                           </Badge>
                         </TableCell>
@@ -450,8 +514,10 @@ export default function TissValidatorPage() {
                               validateInvoiceTiss();
                             }}
                             disabled={validatingInvoice}
+                            className="w-full sm:w-auto bg-white"
                           >
-                            Validar
+                            <FileCheck className="h-3.5 w-3.5 mr-1 sm:mr-2" />
+                            <span className="hidden sm:inline">Validar</span>
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -459,7 +525,7 @@ export default function TissValidatorPage() {
                   </TableBody>
                 </Table>
                 {invoices.length > 10 && (
-                  <div className="p-2 text-sm text-muted-foreground text-center">
+                  <div className="p-3 text-xs sm:text-sm text-muted-foreground text-center bg-slate-50 border-t">
                     Mostrando 10 de {invoices.length} faturas
                   </div>
                 )}
@@ -469,30 +535,33 @@ export default function TissValidatorPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Input Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileCode className="h-5 w-5" />
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+              <FileCode className="h-4 w-4 sm:h-5 sm:w-5" />
               Entrada XML
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm">
               Cole o conteúdo XML ou faça upload de um arquivo
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label htmlFor="file-upload" className="block text-sm font-medium mb-2">
+              <label htmlFor="file-upload" className="block text-sm font-medium mb-2 flex items-center gap-2">
+                <Upload className="h-4 w-4" />
                 Upload de Arquivo
               </label>
-              <Input
-                id="file-upload"
-                type="file"
-                accept=".xml"
-                onChange={handleFileUpload}
-                className="mb-4"
-              />
+              <div className="relative">
+                <Input
+                  id="file-upload"
+                  type="file"
+                  accept=".xml"
+                  onChange={handleFileUpload}
+                  className="bg-white cursor-pointer"
+                />
+              </div>
             </div>
             
             <div>
@@ -505,39 +574,52 @@ export default function TissValidatorPage() {
                 onChange={(e) => setXmlContent(e.target.value)}
                 placeholder="Cole o conteúdo XML TISS aqui..."
                 rows={15}
-                className="font-mono text-sm"
+                className="font-mono text-sm bg-white border-slate-200"
               />
             </div>
             
             <Button 
               onClick={validateTissXml} 
               disabled={loading || !xmlContent.trim()}
-              className="w-full"
+              className="w-full bg-indigo-600 hover:bg-indigo-700"
             >
-              <Upload className="h-4 w-4 mr-2" />
-              {loading ? "Validando..." : "Validar XML"}
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Validando...
+                </>
+              ) : (
+                <>
+                  <FileCheck className="h-4 w-4 mr-2" />
+                  Validar XML
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>
 
         {/* Results Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base sm:text-lg flex items-center gap-2">
               {validationResult ? (
                 validationResult.isValid ? (
-                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
                 ) : (
-                  <XCircle className="h-5 w-5 text-red-500" />
+                  <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />
                 )
               ) : (
-                <FileCode className="h-5 w-5" />
+                <FileCode className="h-4 w-4 sm:h-5 sm:w-5" />
               )}
               Resultado da Validação
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm">
               {validationResult ? (
-                validationResult.isValid ? "XML válido" : "XML inválido"
+                validationResult.isValid ? (
+                  <span className="text-green-600 font-medium">XML válido</span>
+                ) : (
+                  <span className="text-red-600 font-medium">XML inválido</span>
+                )
               ) : (
                 "Execute a validação para ver os resultados"
               )}
@@ -547,69 +629,124 @@ export default function TissValidatorPage() {
             {validationResult ? (
               <div className="space-y-4">
                 {/* Status Badge */}
-                <div className="flex items-center gap-2">
-                  <Badge variant={validationResult.isValid ? "default" : "destructive"}>
-                    {validationResult.isValid ? "Válido" : "Inválido"}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge 
+                    variant={validationResult.isValid ? "default" : "destructive"}
+                    className={cn(
+                      "text-sm font-medium",
+                      validationResult.isValid 
+                        ? "bg-green-100 text-green-700 hover:bg-green-200 border-green-200" 
+                        : "bg-red-100 text-red-700 hover:bg-red-200 border-red-200"
+                    )}
+                  >
+                    {validationResult.isValid ? (
+                      <>
+                        <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                        Válido
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-3.5 w-3.5 mr-1.5" />
+                        Inválido
+                      </>
+                    )}
                   </Badge>
                   {validationResult.warnings.length > 0 && (
-                    <Badge variant="secondary">
+                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                      <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
                       {validationResult.warnings.length} Aviso(s)
+                    </Badge>
+                  )}
+                  {validationResult.errors.length > 0 && (
+                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                      <XCircle className="h-3.5 w-3.5 mr-1.5" />
+                      {validationResult.errors.length} Erro(s)
                     </Badge>
                   )}
                 </div>
 
                 {/* Errors */}
                 {validationResult.errors.length > 0 && (
-                  <div>
-                    <h4 className="font-medium text-red-600 mb-2 flex items-center gap-2">
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm text-red-700 flex items-center gap-2">
                       <XCircle className="h-4 w-4" />
                       Erros ({validationResult.errors.length})
                     </h4>
-                    <ul className="space-y-1">
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
                       {validationResult.errors.map((error, index) => (
-                        <li key={index} className="text-sm text-red-600 bg-red-50 p-2 rounded">
-                          {error}
-                        </li>
+                        <div 
+                          key={index} 
+                          className="text-sm text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg flex items-start gap-2"
+                        >
+                          <XCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-600" />
+                          <span className="flex-1">{error}</span>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 )}
 
                 {/* Warnings */}
                 {validationResult.warnings.length > 0 && (
-                  <div>
-                    <h4 className="font-medium text-yellow-600 mb-2 flex items-center gap-2">
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-sm text-yellow-700 flex items-center gap-2">
                       <AlertTriangle className="h-4 w-4" />
                       Avisos ({validationResult.warnings.length})
                     </h4>
-                    <ul className="space-y-1">
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
                       {validationResult.warnings.map((warning, index) => (
-                        <li key={index} className="text-sm text-yellow-600 bg-yellow-50 p-2 rounded">
-                          {warning}
-                        </li>
+                        <div 
+                          key={index} 
+                          className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 p-3 rounded-lg flex items-start gap-2"
+                        >
+                          <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-yellow-600" />
+                          <span className="flex-1">{warning}</span>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
+                  </div>
+                )}
+
+                {/* Success Message */}
+                {validationResult.isValid && validationResult.errors.length === 0 && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-green-900 mb-1">Validação bem-sucedida!</p>
+                      <p className="text-sm text-green-700">
+                        O XML TISS está em conformidade com o padrão 3.03.00 e pode ser utilizado.
+                      </p>
+                    </div>
                   </div>
                 )}
 
                 {/* Actions */}
-                {validationResult.isValid && (
-                  <div className="flex gap-2 pt-4">
-                    <Button variant="outline" onClick={previewXml}>
+                {validationResult.isValid && validationResult.xmlContent && (
+                  <div className="flex flex-col sm:flex-row gap-2 pt-4 border-t">
+                    <Button 
+                      variant="outline" 
+                      onClick={previewXml}
+                      className="flex-1 bg-white"
+                    >
                       <Eye className="h-4 w-4 mr-2" />
                       Visualizar
                     </Button>
-                    <Button variant="outline" onClick={downloadXml}>
+                    <Button 
+                      variant="outline" 
+                      onClick={downloadXml}
+                      className="flex-1 bg-white"
+                    >
                       <Download className="h-4 w-4 mr-2" />
-                      Baixar
+                      Baixar XML
                     </Button>
                   </div>
                 )}
               </div>
             ) : (
-              <div className="text-center text-muted-foreground py-8">
-                <FileCode className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Nenhuma validação executada ainda</p>
+              <div className="text-center text-muted-foreground py-8 sm:py-12 flex flex-col items-center gap-3">
+                <FileCode className="h-12 w-12 sm:h-16 sm:w-16 opacity-50" />
+                <p className="font-medium text-base sm:text-lg">Nenhuma validação executada ainda</p>
+                <p className="text-sm">Execute uma validação para ver os resultados</p>
               </div>
             )}
           </CardContent>
@@ -617,27 +754,45 @@ export default function TissValidatorPage() {
       </div>
 
       {/* Help Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Como usar o Validador TISS</CardTitle>
+      <Card className="border-slate-200 shadow-sm bg-gradient-to-br from-blue-50/50 to-indigo-50/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+            <Info className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+            Como usar o Validador TISS
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4 text-sm">
-            <div>
-              <h4 className="font-medium mb-2">1. Upload ou Cole XML</h4>
-              <p className="text-muted-foreground">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Upload className="h-4 w-4 text-blue-600" />
+                </div>
+                <h4 className="font-semibold text-sm">1. Upload ou Cole XML</h4>
+              </div>
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Você pode fazer upload de um arquivo XML ou colar o conteúdo diretamente no campo de texto.
               </p>
             </div>
-            <div>
-              <h4 className="font-medium mb-2">2. Validação Automática</h4>
-              <p className="text-muted-foreground">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-2 bg-indigo-100 rounded-lg">
+                  <Shield className="h-4 w-4 text-indigo-600" />
+                </div>
+                <h4 className="font-semibold text-sm">2. Validação Automática</h4>
+              </div>
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 O validador verifica a estrutura XML, elementos obrigatórios, formatos de CNPJ/CPF e versão TISS.
               </p>
             </div>
-            <div>
-              <h4 className="font-medium mb-2">3. Resultados</h4>
-              <p className="text-muted-foreground">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <FileCheck className="h-4 w-4 text-purple-600" />
+                </div>
+                <h4 className="font-semibold text-sm">3. Resultados</h4>
+              </div>
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Erros impedem o uso do XML, enquanto avisos indicam possíveis problemas que devem ser revisados.
               </p>
             </div>

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,8 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { getUserSettings, updateUserSettings, updateUserProfile, type UserSettings as ApiUserSettings } from "@/lib/settings-api";
+import { getUserSettings, updateUserSettings, updateUserProfile, changePassword, type UserSettings as ApiUserSettings } from "@/lib/settings-api";
 import { 
   Settings, 
   User, 
@@ -29,8 +33,20 @@ import {
   VolumeX,
   Moon,
   Sun,
-  Monitor
+  Monitor,
+  CheckCircle2,
+  Clock,
+  Lock,
+  Key,
+  AlertCircle,
+  Loader2,
+  RefreshCw,
+  Upload,
+  X,
+  Image as ImageIcon,
+  Camera
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface UserSettings {
   profile: {
@@ -88,7 +104,8 @@ const DATE_FORMATS = [
 ];
 
 export default function SettingsPage() {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, refreshUser } = useAuth();
+  const { setTheme: setCurrentTheme } = useTheme();
   const router = useRouter();
   
   const [settings, setSettings] = useState<UserSettings>({
@@ -129,6 +146,28 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
+  const [twoFactorSetup, setTwoFactorSetup] = useState<{
+    qrImage: string | null;
+    secret: string | null;
+    verifying: boolean;
+    verificationCode: string;
+  }>({
+    qrImage: null,
+    secret: null,
+    verifying: false,
+    verificationCode: '',
+  });
+  const [show2FADialog, setShow2FADialog] = useState(false);
+  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -146,6 +185,22 @@ export default function SettingsPage() {
       setLoading(true);
       const response = await getUserSettings();
       setSettings(response);
+      
+      // Sync theme with ThemeContext if available
+      if (response.appearance.theme && setCurrentTheme) {
+        setCurrentTheme(response.appearance.theme as 'light' | 'dark' | 'system');
+      }
+      
+      // Load avatar preview if exists
+      if (response.profile.avatar) {
+        // Construct full URL if needed
+        let avatarUrl = response.profile.avatar;
+        if (avatarUrl && !avatarUrl.startsWith('http')) {
+          const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+          avatarUrl = `${base}${avatarUrl.startsWith('/') ? '' : '/'}${avatarUrl}`;
+        }
+        setAvatarPreview(avatarUrl);
+      }
     } catch (error) {
       console.error("Failed to load settings:", error);
       toast.error("Falha ao carregar configurações");
@@ -154,7 +209,162 @@ export default function SettingsPage() {
     }
   };
 
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Por favor, selecione uma imagem válida');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 5MB');
+      return;
+    }
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAvatarPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    // Upload to backend
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('prontivus_access_token') || localStorage.getItem('clinicore_access_token') : null;
+      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${base}/api/settings/me/avatar`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Erro ao fazer upload do avatar');
+      }
+
+      const data = await response.json();
+      // Construct full URL if needed
+      let avatarUrl = data.avatar_url || data.avatar;
+      if (avatarUrl && !avatarUrl.startsWith('http')) {
+        const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        avatarUrl = `${base}${avatarUrl.startsWith('/') ? '' : '/'}${avatarUrl}`;
+      }
+      
+      setSettings(prev => ({
+        ...prev,
+        profile: {
+          ...prev.profile,
+          avatar: avatarUrl
+        }
+      }));
+      setAvatarPreview(avatarUrl);
+      toast.success('Avatar atualizado com sucesso');
+    } catch (error: any) {
+      console.error('Failed to upload avatar:', error);
+      toast.error(error.message || 'Erro ao fazer upload do avatar');
+      setAvatarPreview(null);
+    } finally {
+      setUploadingAvatar(false);
+      // Reset input
+      event.target.value = '';
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('prontivus_access_token') || localStorage.getItem('clinicore_access_token') : null;
+      const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${base}/api/settings/me/avatar`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao remover avatar');
+      }
+
+      setSettings(prev => ({
+        ...prev,
+        profile: {
+          ...prev.profile,
+          avatar: undefined
+        }
+      }));
+      setAvatarPreview(null);
+      toast.success('Avatar removido com sucesso');
+    } catch (error: any) {
+      console.error('Failed to remove avatar:', error);
+      toast.error(error.message || 'Erro ao remover avatar');
+    }
+  };
+
+  const validateProfile = (): boolean => {
+    const errors: Record<string, string> = {};
+    
+    if (!settings.profile.firstName.trim()) {
+      errors.firstName = 'Nome é obrigatório';
+    }
+    
+    if (!settings.profile.lastName.trim()) {
+      errors.lastName = 'Sobrenome é obrigatório';
+    }
+    
+    if (!settings.profile.email.trim()) {
+      errors.email = 'E-mail é obrigatório';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(settings.profile.email)) {
+      errors.email = 'E-mail inválido';
+    }
+    
+    if (settings.profile.phone && !/^[\d\s\(\)\-\+]+$/.test(settings.profile.phone)) {
+      errors.phone = 'Telefone inválido';
+    }
+    
+    setProfileErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const validatePassword = (): boolean => {
+    const errors: Record<string, string> = {};
+    
+    if (!passwordForm.currentPassword) {
+      errors.currentPassword = 'Senha atual é obrigatória';
+    }
+    
+    if (!passwordForm.newPassword) {
+      errors.newPassword = 'Nova senha é obrigatória';
+    } else if (passwordForm.newPassword.length < 8) {
+      errors.newPassword = 'A senha deve ter pelo menos 8 caracteres';
+    }
+    
+    if (!passwordForm.confirmPassword) {
+      errors.confirmPassword = 'Confirmação de senha é obrigatória';
+    } else if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      errors.confirmPassword = 'As senhas não coincidem';
+    }
+    
+    setPasswordErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const saveSettings = async () => {
+    if (!validateProfile()) {
+      toast.error("Por favor, corrija os erros no formulário");
+      return;
+    }
+
     try {
       setSaving(true);
       
@@ -175,6 +385,13 @@ export default function SettingsPage() {
         security: settings.security,
       });
       
+      // Refresh user data in auth context
+      if (refreshUser) {
+        await refreshUser();
+      }
+      // Also reload settings to get updated data
+      await loadSettings();
+      
       toast.success("Configurações salvas com sucesso");
     } catch (error: any) {
       console.error("Failed to save settings:", error);
@@ -182,6 +399,31 @@ export default function SettingsPage() {
       toast.error(errorMessage);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    if (!validatePassword()) {
+      toast.error("Por favor, corrija os erros no formulário");
+      return;
+    }
+
+    try {
+      setChangingPassword(true);
+      await changePassword(passwordForm);
+      toast.success("Senha alterada com sucesso");
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+      setPasswordErrors({});
+    } catch (error: any) {
+      console.error("Failed to change password:", error);
+      const errorMessage = error?.response?.data?.detail || error?.message || "Falha ao alterar senha";
+      toast.error(errorMessage);
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -193,6 +435,11 @@ export default function SettingsPage() {
         [key]: value
       }
     }));
+    
+    // Apply theme change immediately if theme is being changed
+    if (section === 'appearance' && key === 'theme' && setCurrentTheme) {
+      setCurrentTheme(value as 'light' | 'dark' | 'system');
+    }
   };
 
   const getThemeIcon = (theme: string) => {
@@ -210,8 +457,15 @@ export default function SettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+          <Skeleton className="h-10 w-40" />
+        </div>
+        <Skeleton className="h-96 w-full" />
       </div>
     );
   }
@@ -219,60 +473,188 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Settings className="h-8 w-8" />
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <div className="p-2 bg-gradient-to-br from-blue-600 to-cyan-600 rounded-lg text-white shadow-lg">
+              <Settings className="h-6 w-6" />
+            </div>
             Configurações
           </h1>
-          <p className="text-muted-foreground mt-2">
+          <p className="text-muted-foreground">
             Gerencie suas configurações e preferências da conta
           </p>
         </div>
-        <Button onClick={saveSettings} disabled={saving}>
-          <Save className="h-4 w-4 mr-2" />
-          {saving ? 'Salvando...' : 'Salvar Alterações'}
+        <Button 
+          onClick={saveSettings} 
+          disabled={saving}
+          size="lg"
+          className="gap-2 shrink-0"
+        >
+          {saving ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Salvando...
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4" />
+              Salvar Alterações
+            </>
+          )}
         </Button>
       </div>
 
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="profile">Perfil</TabsTrigger>
-          <TabsTrigger value="notifications">Notificações</TabsTrigger>
-          <TabsTrigger value="privacy">Privacidade</TabsTrigger>
-          <TabsTrigger value="appearance">Aparência</TabsTrigger>
-          <TabsTrigger value="security">Segurança</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 gap-2 h-auto p-1 bg-muted/50">
+          <TabsTrigger 
+            value="profile" 
+            className="data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md flex items-center gap-2"
+          >
+            <User className="h-4 w-4" />
+            <span className="hidden sm:inline">Perfil</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="notifications"
+            className="data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md flex items-center gap-2"
+          >
+            <Bell className="h-4 w-4" />
+            <span className="hidden sm:inline">Notificações</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="privacy"
+            className="data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md flex items-center gap-2"
+          >
+            <Shield className="h-4 w-4" />
+            <span className="hidden sm:inline">Privacidade</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="appearance"
+            className="data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md flex items-center gap-2"
+          >
+            <Palette className="h-4 w-4" />
+            <span className="hidden sm:inline">Aparência</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="security"
+            className="data-[state=active]:bg-blue-700 data-[state=active]:text-white data-[state=active]:shadow-md flex items-center gap-2"
+          >
+            <Lock className="h-4 w-4" />
+            <span className="hidden sm:inline">Segurança</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* Profile Settings */}
         <TabsContent value="profile" className="space-y-6">
-          <Card>
+          <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-blue-600">
+                    <div className="p-2 bg-blue-100 rounded-lg">
                 <User className="h-5 w-5" />
+                    </div>
                 Informações do Perfil
               </CardTitle>
-              <CardDescription>
+                  <CardDescription className="mt-2">
                 Atualize suas informações pessoais e dados de contato
               </CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  <User className="h-3 w-3 mr-1" />
+                  Perfil
+                </Badge>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              {/* Avatar Upload Section */}
+              <div className="flex flex-col items-center gap-4 pb-6 border-b">
+                <div className="relative">
+                  <div className="w-32 h-32 rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 border-4 border-blue-200 flex items-center justify-center overflow-hidden shadow-lg">
+                    {avatarPreview || settings.profile.avatar ? (
+                      <img
+                        src={avatarPreview || settings.profile.avatar}
+                        alt="Avatar"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <User className="h-16 w-16 text-blue-400" />
+                    )}
+                  </div>
+                  {uploadingAvatar && (
+                    <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-white" />
+                    </div>
+                  )}
+                  {(avatarPreview || settings.profile.avatar) && (
+                    <button
+                      onClick={handleRemoveAvatar}
+                      className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 transition-colors"
+                      type="button"
+                      aria-label="Remover avatar"
+                      title="Remover avatar"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <Label htmlFor="avatar-upload" className="cursor-pointer">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors shadow-md">
+                      <Camera className="h-4 w-4" />
+                      {avatarPreview || settings.profile.avatar ? 'Alterar Avatar' : 'Adicionar Avatar'}
+                    </div>
+                  </Label>
+                  <input
+                    id="avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                    disabled={uploadingAvatar}
+                    aria-label="Upload avatar"
+                    title="Upload avatar"
+                  />
+                  <p className="text-xs text-muted-foreground text-center max-w-xs">
+                    JPG, PNG ou GIF. Máximo 5MB
+                  </p>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="firstName">Nome</Label>
                   <Input
                     id="firstName"
                     value={settings.profile.firstName}
-                    onChange={(e) => handleSettingChange('profile', 'firstName', e.target.value)}
+                    onChange={(e) => {
+                      handleSettingChange('profile', 'firstName', e.target.value);
+                      if (profileErrors.firstName) {
+                        setProfileErrors(prev => ({ ...prev, firstName: '' }));
+                      }
+                    }}
+                    className={profileErrors.firstName ? 'border-red-500' : ''}
                   />
+                  {profileErrors.firstName && (
+                    <p className="text-sm text-red-500 mt-1">{profileErrors.firstName}</p>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="lastName">Sobrenome</Label>
                   <Input
                     id="lastName"
                     value={settings.profile.lastName}
-                    onChange={(e) => handleSettingChange('profile', 'lastName', e.target.value)}
+                    onChange={(e) => {
+                      handleSettingChange('profile', 'lastName', e.target.value);
+                      if (profileErrors.lastName) {
+                        setProfileErrors(prev => ({ ...prev, lastName: '' }));
+                      }
+                    }}
+                    className={profileErrors.lastName ? 'border-red-500' : ''}
                   />
+                  {profileErrors.lastName && (
+                    <p className="text-sm text-red-500 mt-1">{profileErrors.lastName}</p>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -282,16 +664,34 @@ export default function SettingsPage() {
                     id="email"
                     type="email"
                     value={settings.profile.email}
-                    onChange={(e) => handleSettingChange('profile', 'email', e.target.value)}
+                    onChange={(e) => {
+                      handleSettingChange('profile', 'email', e.target.value);
+                      if (profileErrors.email) {
+                        setProfileErrors(prev => ({ ...prev, email: '' }));
+                      }
+                    }}
+                    className={profileErrors.email ? 'border-red-500' : ''}
                   />
+                  {profileErrors.email && (
+                    <p className="text-sm text-red-500 mt-1">{profileErrors.email}</p>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="phone">Telefone</Label>
                   <Input
                     id="phone"
                     value={settings.profile.phone}
-                    onChange={(e) => handleSettingChange('profile', 'phone', e.target.value)}
+                    onChange={(e) => {
+                      handleSettingChange('profile', 'phone', e.target.value);
+                      if (profileErrors.phone) {
+                        setProfileErrors(prev => ({ ...prev, phone: '' }));
+                      }
+                    }}
+                    className={profileErrors.phone ? 'border-red-500' : ''}
                   />
+                  {profileErrors.phone && (
+                    <p className="text-sm text-red-500 mt-1">{profileErrors.phone}</p>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -300,52 +700,246 @@ export default function SettingsPage() {
 
         {/* Notification Settings */}
         <TabsContent value="notifications" className="space-y-6">
-          <Card>
+          <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-blue-600">
+                    <div className="p-2 bg-blue-100 rounded-lg">
                 <Bell className="h-5 w-5" />
+                    </div>
                 Preferências de Notificações
               </CardTitle>
-              <CardDescription>
+                  <CardDescription className="mt-2">
                 Escolha como deseja ser notificado sobre diferentes atividades
               </CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  <Bell className="h-3 w-3 mr-1" />
+                  Notificações
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">Canais de Notificação</h3>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Mail className="h-4 w-4" />
-                      <Label htmlFor="emailNotifications">Notificações por E-mail</Label>
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-blue-50/50 border border-blue-100">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Mail className="h-4 w-4 text-blue-600" />
                     </div>
+                      <div className="flex flex-col">
+                        <Label htmlFor="emailNotifications" className="font-medium">Notificações por E-mail</Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Receba notificações importantes por e-mail
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
                     <Switch
                       id="emailNotifications"
                       checked={settings.notifications.email}
                       onCheckedChange={(checked) => handleSettingChange('notifications', 'email', checked)}
                     />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Smartphone className="h-4 w-4" />
-                      <Label htmlFor="pushNotifications">Notificações Push</Label>
                     </div>
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-blue-50/50 border border-blue-100">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Smartphone className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div className="flex flex-col">
+                        <Label htmlFor="pushNotifications" className="font-medium">Notificações Push</Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Receba notificações no navegador mesmo quando o site estiver fechado
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
                     <Switch
                       id="pushNotifications"
                       checked={settings.notifications.push}
-                      onCheckedChange={(checked) => handleSettingChange('notifications', 'push', checked)}
+                        onCheckedChange={async (checked) => {
+                          handleSettingChange('notifications', 'push', checked);
+                          // If enabling, request permission and subscribe
+                          if (checked) {
+                            try {
+                              const { requestPushPermissionAndSubscribe, isPushNotificationSupported } = await import('@/lib/push-notifications');
+                              if (isPushNotificationSupported()) {
+                                await requestPushPermissionAndSubscribe();
+                                toast.success('Notificações push ativadas com sucesso');
+                              } else {
+                                toast.warning('Notificações push não são suportadas neste navegador');
+                                // Revert the toggle if not supported
+                                handleSettingChange('notifications', 'push', false);
+                              }
+                            } catch (error: any) {
+                              console.error('Failed to subscribe to push notifications:', error);
+                              toast.error(error?.message || 'Falha ao ativar notificações push');
+                              // Revert the toggle on error
+                              handleSettingChange('notifications', 'push', false);
+                            }
+                          } else {
+                            // If disabling, unsubscribe from push notifications
+                            try {
+                              const { unsubscribeFromPushNotifications } = await import('@/lib/push-notifications');
+                              // Get current subscription endpoint
+                              if ('serviceWorker' in navigator && 'PushManager' in window) {
+                                const registration = await navigator.serviceWorker.ready;
+                                const subscription = await registration.pushManager.getSubscription();
+                                if (subscription) {
+                                  await unsubscribeFromPushNotifications(subscription.endpoint);
+                                  await subscription.unsubscribe();
+                                  toast.success('Notificações push desativadas');
+                                }
+                              }
+                            } catch (error: any) {
+                              console.error('Failed to unsubscribe from push notifications:', error);
+                              // Don't show error toast, just log it
+                            }
+                          }
+                        }}
                     />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Bell className="h-4 w-4" />
-                      <Label htmlFor="smsNotifications">Notificações SMS</Label>
                     </div>
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-blue-50/50 border border-blue-100">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Bell className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div className="flex flex-col">
+                        <Label htmlFor="smsNotifications" className="font-medium">Notificações SMS</Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Receba notificações importantes por SMS no seu telefone
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
                     <Switch
                       id="smsNotifications"
                       checked={settings.notifications.sms}
                       onCheckedChange={(checked) => handleSettingChange('notifications', 'sms', checked)}
                     />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <Separator />
+              
+              {/* Test Notifications */}
+              <div className="space-y-3">
+                {/* Test Email Button */}
+                <div className="p-4 rounded-lg bg-blue-50/30 border border-blue-200/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-1">Testar Notificações por E-mail</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Envie um email de teste para verificar se suas configurações estão funcionando
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const { testEmailNotification } = await import('@/lib/settings-api');
+                          const result = await testEmailNotification();
+                          if (result.email_sent) {
+                            toast.success(`Email de teste enviado para ${result.email_address}`);
+                          } else if (!result.email_enabled) {
+                            toast.warning('Notificações por e-mail estão desabilitadas');
+                          } else {
+                            toast.error('Falha ao enviar email de teste');
+                          }
+                        } catch (error: any) {
+                          console.error('Failed to send test email:', error);
+                          toast.error(error?.response?.data?.detail || 'Falha ao enviar email de teste');
+                        }
+                      }}
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      <Mail className="h-4 w-4 mr-2" />
+                      Enviar Teste
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Test Push Button */}
+                <div className="p-4 rounded-lg bg-blue-50/30 border border-blue-200/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-1">Testar Notificações Push</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Envie uma notificação push de teste para verificar se suas configurações estão funcionando
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const { testPushNotification } = await import('@/lib/settings-api');
+                          const result = await testPushNotification();
+                          if (result.push_sent) {
+                            toast.success(`Notificação push enviada para ${result.devices_notified} dispositivo(s)`);
+                          } else if (!result.push_enabled) {
+                            toast.warning('Notificações push estão desabilitadas');
+                          } else {
+                            toast.error('Falha ao enviar notificação push. Verifique se você permitiu notificações no navegador.');
+                          }
+                        } catch (error: any) {
+                          console.error('Failed to send test push:', error);
+                          const errorMessage = error?.response?.data?.detail || error?.message || 'Falha ao enviar notificação push';
+                          toast.error(errorMessage);
+                        }
+                      }}
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      <Smartphone className="h-4 w-4 mr-2" />
+                      Enviar Teste
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Test SMS Button */}
+                <div className="p-4 rounded-lg bg-blue-50/30 border border-blue-200/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-1">Testar Notificações SMS</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Envie um SMS de teste para verificar se suas configurações estão funcionando. Certifique-se de ter um número de telefone cadastrado.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const { testSmsNotification } = await import('@/lib/settings-api');
+                          const result = await testSmsNotification();
+                          if (result.sms_sent) {
+                            toast.success(`SMS de teste enviado para ${result.phone_number}`);
+                          } else if (!result.sms_enabled) {
+                            toast.warning('Notificações SMS estão desabilitadas');
+                          } else {
+                            toast.error('Falha ao enviar SMS de teste');
+                          }
+                        } catch (error: any) {
+                          console.error('Failed to send test SMS:', error);
+                          const errorMessage = error?.response?.data?.detail || error?.message || 'Falha ao enviar SMS de teste';
+                          toast.error(errorMessage);
+                        }
+                      }}
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      <Bell className="h-4 w-4 mr-2" />
+                      Enviar Teste
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -355,29 +949,174 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">Tipos de Notificação</h3>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="appointmentReminders">Lembretes de Consultas</Label>
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-blue-50/50 border border-blue-100">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Clock className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <Label htmlFor="appointmentReminders" className="font-medium">Lembretes de Consultas</Label>
+                    </div>
                     <Switch
                       id="appointmentReminders"
                       checked={settings.notifications.appointmentReminders}
                       onCheckedChange={(checked) => handleSettingChange('notifications', 'appointmentReminders', checked)}
                     />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="systemUpdates">Atualizações do Sistema</Label>
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-blue-50/50 border border-blue-100">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Settings className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <Label htmlFor="systemUpdates" className="font-medium">Atualizações do Sistema</Label>
+                    </div>
                     <Switch
                       id="systemUpdates"
                       checked={settings.notifications.systemUpdates}
                       onCheckedChange={(checked) => handleSettingChange('notifications', 'systemUpdates', checked)}
                     />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="marketingNotifications">Notificações de Marketing</Label>
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-blue-50/50 border border-blue-100">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Bell className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <Label htmlFor="marketingNotifications" className="font-medium">Notificações de Marketing</Label>
+                    </div>
                     <Switch
                       id="marketingNotifications"
                       checked={settings.notifications.marketing}
                       onCheckedChange={(checked) => handleSettingChange('notifications', 'marketing', checked)}
                     />
+                  </div>
+                </div>
+              </div>
+              
+              <Separator />
+              
+              {/* Test Notification Types */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold">Testar Tipos de Notificação</h3>
+                
+                {/* Test Appointment Reminder */}
+                <div className="p-4 rounded-lg bg-blue-50/30 border border-blue-200/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-blue-600" />
+                        Testar Lembretes de Consultas
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        Envie um lembrete de consulta de teste para verificar se as notificações estão funcionando
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const { testAppointmentReminder } = await import('@/lib/settings-api');
+                          const result = await testAppointmentReminder();
+                          if (result.sent) {
+                            toast.success(`Lembrete de consulta enviado via: ${result.channels?.join(', ')}`);
+                          } else if (!result.enabled) {
+                            toast.warning('Lembretes de consultas estão desabilitados');
+                          } else {
+                            toast.warning('Nenhum canal de notificação ativo. Verifique suas configurações.');
+                          }
+                        } catch (error: any) {
+                          console.error('Failed to send test appointment reminder:', error);
+                          const errorMessage = error?.response?.data?.detail || error?.message || 'Falha ao enviar lembrete de teste';
+                          toast.error(errorMessage);
+                        }
+                      }}
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      <Clock className="h-4 w-4 mr-2" />
+                      Enviar Teste
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* Test System Update */}
+                <div className="p-4 rounded-lg bg-blue-50/30 border border-blue-200/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                        <Settings className="h-4 w-4 text-blue-600" />
+                        Testar Atualizações do Sistema
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        Envie uma notificação de atualização do sistema de teste
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const { testSystemUpdate } = await import('@/lib/settings-api');
+                          const result = await testSystemUpdate();
+                          if (result.sent) {
+                            toast.success(`Atualização do sistema enviada via: ${result.channels?.join(', ')}`);
+                          } else if (!result.enabled) {
+                            toast.warning('Atualizações do sistema estão desabilitadas');
+                          } else {
+                            toast.warning('Nenhum canal de notificação ativo. Verifique suas configurações.');
+                          }
+                        } catch (error: any) {
+                          console.error('Failed to send test system update:', error);
+                          const errorMessage = error?.response?.data?.detail || error?.message || 'Falha ao enviar atualização de teste';
+                          toast.error(errorMessage);
+                        }
+                      }}
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Enviar Teste
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* Test Marketing Notification */}
+                <div className="p-4 rounded-lg bg-blue-50/30 border border-blue-200/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                        <Bell className="h-4 w-4 text-blue-600" />
+                        Testar Notificações de Marketing
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        Envie uma notificação de marketing de teste para verificar se as notificações estão funcionando
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const { testMarketingNotification } = await import('@/lib/settings-api');
+                          const result = await testMarketingNotification();
+                          if (result.sent) {
+                            toast.success(`Notificação de marketing enviada via: ${result.channels?.join(', ')}`);
+                          } else if (!result.enabled) {
+                            toast.warning('Notificações de marketing estão desabilitadas');
+                          } else {
+                            toast.warning('Nenhum canal de notificação ativo. Verifique suas configurações.');
+                          }
+                        } catch (error: any) {
+                          console.error('Failed to send test marketing notification:', error);
+                          const errorMessage = error?.response?.data?.detail || error?.message || 'Falha ao enviar notificação de marketing de teste';
+                          toast.error(errorMessage);
+                        }
+                      }}
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      <Bell className="h-4 w-4 mr-2" />
+                      Enviar Teste
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -387,15 +1126,25 @@ export default function SettingsPage() {
 
         {/* Privacy Settings */}
         <TabsContent value="privacy" className="space-y-6">
-          <Card>
+          <Card className="border-l-4 border-l-blue-600 hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-blue-600">
+                    <div className="p-2 bg-blue-100 rounded-lg">
                 <Shield className="h-5 w-5" />
+                    </div>
                 Privacidade e Dados
               </CardTitle>
-              <CardDescription>
+                  <CardDescription className="mt-2">
                 Controle suas configurações de privacidade e preferências de compartilhamento de dados
               </CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  <Shield className="h-3 w-3 mr-1" />
+                  Privacidade
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
@@ -417,29 +1166,88 @@ export default function SettingsPage() {
                 </div>
                 
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="showOnlineStatus">Mostrar Status Online</Label>
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-blue-50/50 border border-blue-100">
+                    <Label htmlFor="showOnlineStatus" className="font-medium">Mostrar Status Online</Label>
                     <Switch
                       id="showOnlineStatus"
                       checked={settings.privacy.showOnlineStatus}
                       onCheckedChange={(checked) => handleSettingChange('privacy', 'showOnlineStatus', checked)}
                     />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="allowDirectMessages">Permitir Mensagens Diretas</Label>
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-blue-50/50 border border-blue-100">
+                    <Label htmlFor="allowDirectMessages" className="font-medium">Permitir Mensagens Diretas</Label>
                     <Switch
                       id="allowDirectMessages"
                       checked={settings.privacy.allowDirectMessages}
                       onCheckedChange={(checked) => handleSettingChange('privacy', 'allowDirectMessages', checked)}
                     />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="dataSharing">Permitir Compartilhamento de Dados</Label>
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-blue-50/50 border border-blue-100">
+                    <Label htmlFor="dataSharing" className="font-medium">Permitir Compartilhamento de Dados</Label>
                     <Switch
                       id="dataSharing"
                       checked={settings.privacy.dataSharing}
                       onCheckedChange={(checked) => handleSettingChange('privacy', 'dataSharing', checked)}
                     />
+                  </div>
+                </div>
+              </div>
+              
+              <Separator />
+              
+              {/* Test Privacy Settings */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold">Testar Configurações de Privacidade</h3>
+                <div className="p-4 rounded-lg bg-blue-50/30 border border-blue-200/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-blue-600" />
+                        Verificar Configurações de Privacidade
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        Teste suas configurações de privacidade e veja como elas afetam sua experiência
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const { testPrivacySettings } = await import('@/lib/settings-api');
+                          const result = await testPrivacySettings();
+                          
+                          // Show detailed results
+                          const results = result.test_results;
+                          let message = "Configurações de Privacidade:\n\n";
+                          
+                          message += `• Status Online: ${results.showOnlineStatus.enabled ? '✅ Ativado' : '❌ Desativado'}\n`;
+                          message += `  ${results.showOnlineStatus.effect}\n\n`;
+                          
+                          message += `• Mensagens Diretas: ${results.allowDirectMessages.enabled ? '✅ Permitido' : '❌ Bloqueado'}\n`;
+                          message += `  ${results.allowDirectMessages.effect}\n\n`;
+                          
+                          message += `• Compartilhamento de Dados: ${results.dataSharing.enabled ? '✅ Permitido' : '❌ Bloqueado'}\n`;
+                          message += `  ${results.dataSharing.effect}\n\n`;
+                          
+                          message += `• Visibilidade do Perfil: ${results.profileVisibility.value}\n`;
+                          message += `  ${results.profileVisibility.effect}`;
+                          
+                          toast.success(message, {
+                            duration: 8000,
+                          });
+                        } catch (error: any) {
+                          console.error('Failed to test privacy settings:', error);
+                          const errorMessage = error?.response?.data?.detail || error?.message || 'Falha ao testar configurações de privacidade';
+                          toast.error(errorMessage);
+                        }
+                      }}
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      <Shield className="h-4 w-4 mr-2" />
+                      Testar
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -449,15 +1257,25 @@ export default function SettingsPage() {
 
         {/* Appearance Settings */}
         <TabsContent value="appearance" className="space-y-6">
-          <Card>
+          <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-blue-600">
+                    <div className="p-2 bg-blue-100 rounded-lg">
                 <Palette className="h-5 w-5" />
+                    </div>
                 Aparência e Idioma
               </CardTitle>
-              <CardDescription>
+                  <CardDescription className="mt-2">
                 Personalize a aparência e o idioma da sua interface
               </CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  <Palette className="h-3 w-3 mr-1" />
+                  Aparência
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -558,38 +1376,91 @@ export default function SettingsPage() {
 
         {/* Security Settings */}
         <TabsContent value="security" className="space-y-6">
-          <Card>
+          <Card className="border-l-4 border-l-blue-700 hover:shadow-lg transition-shadow">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-blue-700">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Lock className="h-5 w-5" />
+                    </div>
                 Segurança e Autenticação
               </CardTitle>
-              <CardDescription>
+                  <CardDescription className="mt-2">
                 Gerencie as configurações de segurança e autenticação da sua conta
               </CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  <Lock className="h-3 w-3 mr-1" />
+                  Segurança
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between p-4 rounded-lg bg-blue-50/50 border border-blue-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Key className="h-4 w-4 text-blue-600" />
+                    </div>
                   <div>
-                    <Label htmlFor="twoFactorAuth">Autenticação de Dois Fatores</Label>
-                    <p className="text-sm text-muted-foreground">
+                      <Label htmlFor="twoFactorAuth" className="font-medium">Autenticação de Dois Fatores</Label>
+                      <p className="text-sm text-muted-foreground mt-1">
                       Adicione uma camada extra de segurança à sua conta
                     </p>
+                    </div>
                   </div>
                   <Switch
                     id="twoFactorAuth"
                     checked={settings.security.twoFactorAuth}
-                    onCheckedChange={(checked) => handleSettingChange('security', 'twoFactorAuth', checked)}
+                    onCheckedChange={async (checked) => {
+                      if (checked) {
+                        // Enable 2FA - start setup process
+                        try {
+                          const { setup2FA } = await import('@/lib/settings-api');
+                          const result = await setup2FA();
+                          setTwoFactorSetup({
+                            qrImage: result.qr_image,
+                            secret: result.secret,
+                            verifying: false,
+                            verificationCode: '',
+                          });
+                          setShow2FADialog(true);
+                        } catch (error: any) {
+                          console.error('Failed to setup 2FA:', error);
+                          toast.error(error?.response?.data?.detail || 'Falha ao configurar autenticação de dois fatores');
+                          // Revert toggle
+                          handleSettingChange('security', 'twoFactorAuth', false);
+                        }
+                      } else {
+                        // Disable 2FA
+                        try {
+                          const { disable2FA } = await import('@/lib/settings-api');
+                          await disable2FA();
+                          handleSettingChange('security', 'twoFactorAuth', false);
+                          toast.success('Autenticação de dois fatores desativada');
+                        } catch (error: any) {
+                          console.error('Failed to disable 2FA:', error);
+                          toast.error(error?.response?.data?.detail || 'Falha ao desativar autenticação de dois fatores');
+                          // Revert toggle
+                          handleSettingChange('security', 'twoFactorAuth', true);
+                        }
+                      }
+                    }}
                   />
                 </div>
                 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between p-4 rounded-lg bg-blue-50/50 border border-blue-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <AlertCircle className="h-4 w-4 text-blue-600" />
+                    </div>
                   <div>
-                    <Label htmlFor="loginAlerts">Alertas de Login</Label>
-                    <p className="text-sm text-muted-foreground">
+                      <Label htmlFor="loginAlerts" className="font-medium">Alertas de Login</Label>
+                      <p className="text-sm text-muted-foreground mt-1">
                       Seja notificado quando alguém fizer login na sua conta
                     </p>
+                    </div>
                   </div>
                   <Switch
                     id="loginAlerts"
@@ -601,17 +1472,168 @@ export default function SettingsPage() {
               
               <Separator />
               
+              {/* Test Login Alert */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold">Testar Alertas de Login</h3>
+                <div className="p-4 rounded-lg bg-blue-50/30 border border-blue-200/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-blue-600" />
+                        Testar Alerta de Login
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        Envie um alerta de login de teste para verificar se as notificações estão funcionando
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const { testLoginAlert } = await import('@/lib/settings-api');
+                          const result = await testLoginAlert();
+                          if (result.sent) {
+                            toast.success('Alerta de login de teste enviado com sucesso');
+                          } else if (!result.enabled) {
+                            toast.warning('Alertas de login estão desabilitados');
+                          } else {
+                            toast.error('Falha ao enviar alerta de login de teste');
+                          }
+                        } catch (error: any) {
+                          console.error('Failed to send test login alert:', error);
+                          const errorMessage = error?.response?.data?.detail || error?.message || 'Falha ao enviar alerta de login de teste';
+                          toast.error(errorMessage);
+                        }
+                      }}
+                      className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      Enviar Teste
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              
+              <Separator />
+              
               <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Alterar Senha</h3>
+                  <div className="space-y-4 p-4 rounded-lg bg-gray-50 border border-gray-200">
+                    <div>
+                      <Label htmlFor="currentPassword">Senha Atual</Label>
+                      <div className="relative">
+                        <Input
+                          id="currentPassword"
+                          type={showPassword ? "text" : "password"}
+                          value={passwordForm.currentPassword}
+                          onChange={(e) => {
+                            setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }));
+                            if (passwordErrors.currentPassword) {
+                              setPasswordErrors(prev => ({ ...prev, currentPassword: '' }));
+                            }
+                          }}
+                          className={passwordErrors.currentPassword ? 'border-red-500' : ''}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4 text-gray-500" />
+                          ) : (
+                            <Eye className="h-4 w-4 text-gray-500" />
+                          )}
+                        </Button>
+                      </div>
+                      {passwordErrors.currentPassword && (
+                        <p className="text-sm text-red-500 mt-1">{passwordErrors.currentPassword}</p>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="newPassword">Nova Senha</Label>
+                      <Input
+                        id="newPassword"
+                        type={showPassword ? "text" : "password"}
+                        value={passwordForm.newPassword}
+                        onChange={(e) => {
+                          setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }));
+                          if (passwordErrors.newPassword) {
+                            setPasswordErrors(prev => ({ ...prev, newPassword: '' }));
+                          }
+                        }}
+                        className={passwordErrors.newPassword ? 'border-red-500' : ''}
+                      />
+                      {passwordErrors.newPassword && (
+                        <p className="text-sm text-red-500 mt-1">{passwordErrors.newPassword}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Mínimo de 8 caracteres
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
+                      <Input
+                        id="confirmPassword"
+                        type={showPassword ? "text" : "password"}
+                        value={passwordForm.confirmPassword}
+                        onChange={(e) => {
+                          setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }));
+                          if (passwordErrors.confirmPassword) {
+                            setPasswordErrors(prev => ({ ...prev, confirmPassword: '' }));
+                          }
+                        }}
+                        className={passwordErrors.confirmPassword ? 'border-red-500' : ''}
+                      />
+                      {passwordErrors.confirmPassword && (
+                        <p className="text-sm text-red-500 mt-1">{passwordErrors.confirmPassword}</p>
+                      )}
+                    </div>
+                    
+                    <Button
+                      onClick={handlePasswordChange}
+                      disabled={changingPassword}
+                      className="w-full"
+                    >
+                      {changingPassword ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Alterando...
+                        </>
+                      ) : (
+                        <>
+                          <Key className="h-4 w-4 mr-2" />
+                          Alterar Senha
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                
+                <Separator />
+                
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Configurações de Sessão</h3>
                 <div>
                   <Label htmlFor="sessionTimeout">Tempo Limite de Sessão (minutos)</Label>
                   <Input
                     id="sessionTimeout"
                     type="number"
                     value={settings.security.sessionTimeout}
-                    onChange={(e) => handleSettingChange('security', 'sessionTimeout', parseInt(e.target.value))}
+                      onChange={(e) => handleSettingChange('security', 'sessionTimeout', parseInt(e.target.value) || 30)}
                     min="5"
                     max="480"
                   />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Tempo de inatividade antes do logout automático (5-480 minutos)
+                    </p>
                 </div>
                 
                 <div>
@@ -620,16 +1642,118 @@ export default function SettingsPage() {
                     id="passwordExpiry"
                     type="number"
                     value={settings.security.passwordExpiry}
-                    onChange={(e) => handleSettingChange('security', 'passwordExpiry', parseInt(e.target.value))}
+                      onChange={(e) => handleSettingChange('security', 'passwordExpiry', parseInt(e.target.value) || 90)}
                     min="30"
                     max="365"
                   />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Dias até a senha expirar e precisar ser alterada (30-365 dias)
+                    </p>
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+      
+      {/* 2FA Setup Dialog */}
+      <Dialog open={show2FADialog} onOpenChange={setShow2FADialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Configurar Autenticação de Dois Fatores</DialogTitle>
+            <DialogDescription>
+              Escaneie o QR code com seu aplicativo autenticador (Google Authenticator, Authy, etc.)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {twoFactorSetup.qrImage && (
+              <div className="flex justify-center">
+                <img 
+                  src={twoFactorSetup.qrImage} 
+                  alt="QR Code for 2FA" 
+                  className="border rounded-lg p-2 bg-white"
+                />
+              </div>
+            )}
+            {twoFactorSetup.secret && (
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">Ou insira este código manualmente:</p>
+                <code className="text-sm font-mono break-all">{twoFactorSetup.secret}</code>
+              </div>
+            )}
+            <div>
+              <Label htmlFor="verificationCode">Código de Verificação (6 dígitos)</Label>
+              <Input
+                id="verificationCode"
+                type="text"
+                maxLength={6}
+                value={twoFactorSetup.verificationCode}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, ''); // Only numbers
+                  setTwoFactorSetup(prev => ({ ...prev, verificationCode: value }));
+                }}
+                placeholder="000000"
+                className="mt-1"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={async () => {
+                  if (twoFactorSetup.verificationCode.length !== 6) {
+                    toast.error('Por favor, insira um código de 6 dígitos');
+                    return;
+                  }
+                  
+                  setTwoFactorSetup(prev => ({ ...prev, verifying: true }));
+                  try {
+                    const { verify2FA } = await import('@/lib/settings-api');
+                    const result = await verify2FA(twoFactorSetup.verificationCode);
+                    if (result.enabled) {
+                      toast.success('Autenticação de dois fatores ativada com sucesso!');
+                      setShow2FADialog(false);
+                      handleSettingChange('security', 'twoFactorAuth', true);
+                      // Reload settings to get updated 2FA status
+                      window.location.reload();
+                    }
+                  } catch (error: any) {
+                    console.error('Failed to verify 2FA:', error);
+                    toast.error(error?.response?.data?.detail || 'Código inválido. Por favor, tente novamente.');
+                  } finally {
+                    setTwoFactorSetup(prev => ({ ...prev, verifying: false }));
+                  }
+                }}
+                disabled={twoFactorSetup.verificationCode.length !== 6 || twoFactorSetup.verifying}
+                className="flex-1"
+              >
+                {twoFactorSetup.verifying ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Verificando...
+                  </>
+                ) : (
+                  'Verificar e Ativar'
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShow2FADialog(false);
+                  setTwoFactorSetup({
+                    qrImage: null,
+                    secret: null,
+                    verifying: false,
+                    verificationCode: '',
+                  });
+                  handleSettingChange('security', 'twoFactorAuth', false);
+                }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

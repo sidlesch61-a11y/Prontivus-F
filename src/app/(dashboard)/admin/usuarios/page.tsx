@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Plus, 
   Search, 
@@ -45,11 +46,14 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Activity,
+  AlertCircle
 } from "lucide-react";
 import { useAuth } from "@/contexts";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/admin-api";
+import { cn } from "@/lib/utils";
 
 interface User {
   id: number;
@@ -106,11 +110,11 @@ export default function AdminUsersPage() {
 
   const getRoleColor = (role: string) => {
     switch (role) {
-      case 'admin': return "bg-red-100 text-red-800";
-      case 'secretary': return "bg-blue-100 text-blue-800";
-      case 'doctor': return "bg-green-100 text-green-800";
-      case 'patient': return "bg-gray-100 text-gray-800";
-      default: return "bg-gray-100 text-gray-800";
+      case 'admin': return "bg-red-100 text-red-800 border-red-200";
+      case 'secretary': return "bg-blue-100 text-blue-800 border-blue-200";
+      case 'doctor': return "bg-green-100 text-green-800 border-green-200";
+      case 'patient': return "bg-gray-100 text-gray-800 border-gray-200";
+      default: return "bg-gray-100 text-gray-800 border-gray-200";
     }
   };
 
@@ -134,6 +138,20 @@ export default function AdminUsersPage() {
     
     return matchesSearch && matchesRole;
   });
+
+  // Calculate statistics
+  const stats = {
+    total: users.length,
+    active: users.filter(u => u.is_active).length,
+    inactive: users.filter(u => !u.is_active).length,
+    verified: users.filter(u => u.is_verified).length,
+    byRole: {
+      admin: users.filter(u => u.role === 'admin').length,
+      secretary: users.filter(u => u.role === 'secretary').length,
+      doctor: users.filter(u => u.role === 'doctor').length,
+      patient: users.filter(u => u.role === 'patient').length,
+    }
+  };
 
   const handleEditUser = (user: User) => {
     setSelectedUser(user);
@@ -199,44 +217,51 @@ export default function AdminUsersPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto py-8">
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+          <Skeleton className="h-10 w-32" />
         </div>
+        <Skeleton className="h-96 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <Users className="h-8 w-8" />
-              Gerenciar Usuários
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              Gerencie usuários, permissões e acessos do sistema
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={testDatabaseConnections}
-              disabled={isTestingDb}
-            >
-              {isTestingDb ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Database className="h-4 w-4 mr-2" />
-              )}
-              {isTestingDb ? 'Testando...' : 'Testar Conexões DB'}
-            </Button>
+    <div className="space-y-6">
+      {/* Modern Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Users className="h-7 w-7 text-blue-600" />
+            </div>
+            Gerenciar Usuários
+          </h1>
+          <p className="text-muted-foreground mt-2 text-sm">
+            Gerencie usuários, permissões e acessos do sistema
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={testDatabaseConnections}
+            disabled={isTestingDb}
+            className="border-blue-300 text-blue-700 hover:bg-blue-50"
+          >
+            {isTestingDb ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Database className="h-4 w-4 mr-2" />
+            )}
+            {isTestingDb ? 'Testando...' : 'Testar DB'}
+          </Button>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white">
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Usuário
               </Button>
@@ -293,7 +318,6 @@ export default function AdminUsersPage() {
                     const email = (document.getElementById('email') as HTMLInputElement)?.value || '';
                     const username = (document.getElementById('username') as HTMLInputElement)?.value || '';
                     const role = (document.querySelector('[data-state="open"] [data-radix-select-collection-item][data-highlighted]') as HTMLElement)?.getAttribute('data-value') || 'patient';
-                    // Simple temp password generation; in real flow, admin sets or invite email
                     const password = Math.random().toString(36).slice(-10) + 'A1!';
                     const created = await adminApi.createUser({ username, email, password, first_name: firstName, last_name: lastName, role: role as any });
                     setUsers(prev => [created as any, ...prev]);
@@ -308,237 +332,331 @@ export default function AdminUsersPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          </div>
         </div>
+      </div>
 
-        {/* Database Connection Tests */}
-        {showDbTests && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="h-5 w-5" />
-                  Teste de Conexões com Banco de Dados
-                </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={testDatabaseConnections}
-                  disabled={isTestingDb}
-                >
-                  <RefreshCw className={`h-4 w-4 ${isTestingDb ? 'animate-spin' : ''}`} />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isTestingDb && !dbTestResults ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  <span className="ml-2">Testando conexões...</span>
-                </div>
-              ) : dbTestResults ? (
-                <div className="space-y-4">
-                  {/* Summary */}
-                  <div className="grid grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
-                    <div>
-                      <div className="text-sm text-muted-foreground">Total de Módulos</div>
-                      <div className="text-2xl font-bold">{dbTestResults.summary.total_modules}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Sucesso</div>
-                      <div className="text-2xl font-bold text-green-600">{dbTestResults.summary.successful}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Falhas</div>
-                      <div className="text-2xl font-bold text-red-600">{dbTestResults.summary.failed}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Tempo Médio</div>
-                      <div className="text-2xl font-bold">{dbTestResults.summary.average_response_time_ms}ms</div>
-                    </div>
-                  </div>
-
-                  {/* Module Results */}
-                  <div className="space-y-2">
-                    <h3 className="font-semibold text-sm">Resultados por Módulo:</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {Object.entries(dbTestResults.modules).map(([module, result]: [string, any]) => (
-                        <div
-                          key={module}
-                          className={`p-3 rounded-lg border ${
-                            result.status === 'success' 
-                              ? 'bg-green-50 border-green-200' 
-                              : 'bg-red-50 border-red-200'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-sm">{getModuleDisplayName(module)}</span>
-                            {result.status === 'success' ? (
-                              <CheckCircle2 className="h-5 w-5 text-green-600" />
-                            ) : (
-                              <XCircle className="h-5 w-5 text-red-600" />
-                            )}
-                          </div>
-                          <div className="text-xs space-y-1">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Status:</span>
-                              <Badge variant={result.status === 'success' ? 'default' : 'destructive'} className="text-xs">
-                                {result.status === 'success' ? 'OK' : 'Erro'}
-                              </Badge>
-                            </div>
-                            {result.record_count !== null && (
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Registros:</span>
-                                <span className="font-medium">{result.record_count}</span>
-                              </div>
-                            )}
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Tempo:</span>
-                              <span className="font-medium">{result.response_time_ms}ms</span>
-                            </div>
-                            {result.error && (
-                              <div className="mt-2 p-2 bg-red-100 rounded text-xs text-red-800 break-words">
-                                {result.error}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  Clique em "Testar Conexões DB" para verificar a conectividade dos módulos
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Filters */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar usuários..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-              <div className="w-48">
-                <Select value={roleFilter} onValueChange={setRoleFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Filtrar por função" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as funções</SelectItem>
-                    <SelectItem value="admin">Administrador</SelectItem>
-                    <SelectItem value="secretary">Secretária</SelectItem>
-                    <SelectItem value="doctor">Médico</SelectItem>
-                    <SelectItem value="patient">Paciente</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total de Usuários
+            </CardTitle>
+            <Users className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.active} ativos
+            </p>
           </CardContent>
         </Card>
 
-        {/* Users Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Usuários ({filteredUsers.length})
+        <Card className="border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Usuários Ativos
             </CardTitle>
+            <UserCheck className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Usuário</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Função</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Verificado</TableHead>
-                  <TableHead>Criado em</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                          {getRoleIcon(user.role)}
-                        </div>
-                        <div>
-                          <div className="font-medium">
-                            {user.first_name} {user.last_name}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            @{user.username}
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      <Badge className={getRoleColor(user.role)}>
-                        {getRoleLabel(user.role)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.is_active ? "default" : "secondary"}>
-                        {user.is_active ? "Ativo" : "Inativo"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.is_verified ? "default" : "outline"}>
-                        {user.is_verified ? "Sim" : "Não"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(user.created_at).toLocaleDateString('pt-BR')}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditUser(user)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleToggleActive(user.id)}
-                        >
-                          {user.is_active ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="text-2xl font-bold">{stats.active}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.inactive} inativos
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-purple-500 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Verificados
+            </CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.verified}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.total - stats.verified} não verificados
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-orange-500 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Médicos
+            </CardTitle>
+            <Stethoscope className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.byRole.doctor}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.byRole.secretary} secretárias
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-red-500 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Administradores
+            </CardTitle>
+            <Shield className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.byRole.admin}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.byRole.patient} pacientes
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Database Connection Tests */}
+      {showDbTests && (
+        <Card className="border-l-4 border-l-blue-600">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-blue-600">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Database className="h-5 w-5" />
+                </div>
+                Teste de Conexões com Banco de Dados
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={testDatabaseConnections}
+                disabled={isTestingDb}
+              >
+                <RefreshCw className={cn("h-4 w-4", isTestingDb && "animate-spin")} />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isTestingDb && !dbTestResults ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                <span className="ml-2">Testando conexões...</span>
+              </div>
+            ) : dbTestResults ? (
+              <div className="space-y-4">
+                {/* Summary */}
+                <div className="grid grid-cols-4 gap-4 p-4 bg-blue-50/50 rounded-lg border border-blue-100">
+                  <div>
+                    <div className="text-sm text-muted-foreground">Total de Módulos</div>
+                    <div className="text-2xl font-bold">{dbTestResults.summary.total_modules}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">Sucesso</div>
+                    <div className="text-2xl font-bold text-green-600">{dbTestResults.summary.successful}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">Falhas</div>
+                    <div className="text-2xl font-bold text-red-600">{dbTestResults.summary.failed}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">Tempo Médio</div>
+                    <div className="text-2xl font-bold">{dbTestResults.summary.average_response_time_ms}ms</div>
+                  </div>
+                </div>
+
+                {/* Module Results */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-sm">Resultados por Módulo:</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {Object.entries(dbTestResults.modules).map(([module, result]: [string, any]) => (
+                      <div
+                        key={module}
+                        className={cn(
+                          "p-3 rounded-lg border",
+                          result.status === 'success' 
+                            ? 'bg-green-50 border-green-200' 
+                            : 'bg-red-50 border-red-200'
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-sm">{getModuleDisplayName(module)}</span>
+                          {result.status === 'success' ? (
+                            <CheckCircle2 className="h-5 w-5 text-green-600" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-red-600" />
+                          )}
+                        </div>
+                        <div className="text-xs space-y-1">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Status:</span>
+                            <Badge variant={result.status === 'success' ? 'default' : 'destructive'} className="text-xs">
+                              {result.status === 'success' ? 'OK' : 'Erro'}
+                            </Badge>
+                          </div>
+                          {result.record_count !== null && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Registros:</span>
+                              <span className="font-medium">{result.record_count}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Tempo:</span>
+                            <span className="font-medium">{result.response_time_ms}ms</span>
+                          </div>
+                          {result.error && (
+                            <div className="mt-2 p-2 bg-red-100 rounded text-xs text-red-800 break-words">
+                              {result.error}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                Clique em "Testar Conexões DB" para verificar a conectividade dos módulos
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Filters */}
+      <Card className="border-l-4 border-l-blue-500">
+        <CardContent className="pt-6">
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar usuários..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="w-48">
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="border-blue-200 focus:border-blue-500">
+                  <SelectValue placeholder="Filtrar por função" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as funções</SelectItem>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="secretary">Secretária</SelectItem>
+                  <SelectItem value="doctor">Médico</SelectItem>
+                  <SelectItem value="patient">Paciente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Users Table */}
+      <Card className="border-l-4 border-l-blue-600 hover:shadow-lg transition-shadow">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-blue-600" />
+                Usuários ({filteredUsers.length})
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Lista completa de usuários do sistema
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Usuário</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Função</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Verificado</TableHead>
+                <TableHead>Criado em</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredUsers.map((user) => (
+                <TableRow key={user.id} className="hover:bg-blue-50/30">
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center border-2 border-blue-200">
+                        {getRoleIcon(user.role)}
+                      </div>
+                      <div>
+                        <div className="font-medium">
+                          {user.first_name} {user.last_name}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          @{user.username}
+                        </div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>
+                    <Badge className={cn("border", getRoleColor(user.role))}>
+                      {getRoleLabel(user.role)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={user.is_active ? "default" : "secondary"} className={cn(
+                      user.is_active && "bg-green-100 text-green-800 border-green-200"
+                    )}>
+                      {user.is_active ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={user.is_verified ? "default" : "outline"} className={cn(
+                      user.is_verified && "bg-purple-100 text-purple-800 border-purple-200"
+                    )}>
+                      {user.is_verified ? "Sim" : "Não"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {new Date(user.created_at).toLocaleDateString('pt-BR')}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditUser(user)}
+                        className="hover:bg-blue-100"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleToggleActive(user.id)}
+                        className="hover:bg-green-100"
+                      >
+                        {user.is_active ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteUser(user.id)}
+                        className="text-destructive hover:text-destructive hover:bg-red-100"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

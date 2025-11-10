@@ -1,8 +1,54 @@
 @import "tailwindcss";
 
 @theme {
-	--color-background: oklch(1 0 0);
-	--color-foreground: oklch(0.24 0.02 262);
+	/* Healthcare Color Palette - Softer Blue Tones */
+	/* Primary Soft Blue - Preferred by both male and female consumers, calming */
+	--color-primary: oklch(0.60 0.10 240);
+	--color-primary-foreground: oklch(0.98 0 0);
+	
+	/* Soft Healthcare Blue - Primary brand color (softer tones) */
+	--color-blue-50: oklch(0.98 0.01 240);
+	--color-blue-100: oklch(0.95 0.02 240);
+	--color-blue-200: oklch(0.90 0.04 240);
+	--color-blue-300: oklch(0.82 0.06 240);
+	--color-blue-400: oklch(0.72 0.08 240);
+	--color-blue-500: oklch(0.62 0.10 240);
+	--color-blue-600: oklch(0.52 0.12 240);
+	--color-blue-700: oklch(0.42 0.14 240);
+	--color-blue-800: oklch(0.35 0.12 240);
+	--color-blue-900: oklch(0.28 0.10 240);
+	
+	/* Healthcare Green - Positive, healing */
+	--color-green-50: oklch(0.97 0.02 150);
+	--color-green-100: oklch(0.94 0.04 150);
+	--color-green-200: oklch(0.88 0.06 150);
+	--color-green-300: oklch(0.78 0.10 150);
+	--color-green-400: oklch(0.65 0.12 150);
+	--color-green-500: oklch(0.55 0.14 150);
+	--color-green-600: oklch(0.45 0.16 150);
+	--color-green-700: oklch(0.35 0.18 150);
+	--color-green-800: oklch(0.28 0.16 150);
+	--color-green-900: oklch(0.20 0.14 150);
+	
+	/* Base colors */
+	--color-background: oklch(0.99 0 0);
+	--color-foreground: oklch(0.20 0.02 240);
+	--color-muted: oklch(0.96 0.01 240);
+	--color-muted-foreground: oklch(0.45 0.02 240);
+	--color-card: oklch(1 0 0);
+	--color-card-foreground: oklch(0.20 0.02 240);
+	--color-border: oklch(0.90 0.02 240);
+	--color-ring: oklch(0.62 0.10 240);
+	
+	/* Healthcare accent colors - Softer blue tones */
+	--color-accent: oklch(0.62 0.10 240); /* Soft blue accent */
+	--color-accent-foreground: oklch(0.98 0 0);
+	
+	/* Status colors - healthcare appropriate (softer tones) */
+	--color-success: oklch(0.60 0.12 150); /* Soft green */
+	--color-warning: oklch(0.75 0.10 80); /* Soft amber */
+	--color-error: oklch(0.58 0.15 20); /* Soft red */
+	--color-info: oklch(0.62 0.10 240); /* Soft blue */
 }
 
 @layer base {
@@ -16,7 +62,7 @@
 
 /* Accessibility: larger tap targets already added in mobile work */
 @layer base {
-	/* High contrast (user toggle via class) */
+	/* High contrast (user toggle via class) - Healthcare colors */
 	html.a11y-high-contrast {
 		--color-background: oklch(1 0 0);
 		--color-foreground: oklch(0.2 0 0);
@@ -24,7 +70,7 @@
 		--color-card-foreground: oklch(0.2 0 0);
 		--color-muted: oklch(0.93 0 0);
 		--color-muted-foreground: oklch(0.15 0 0);
-		--color-primary: oklch(0.45 0.25 200);
+		--color-primary: oklch(0.52 0.12 240); /* Soft healthcare blue */
 		--color-primary-foreground: oklch(1 0 0);
 	}
 
@@ -61,11 +107,11 @@
 	}
 }
 
-/* Modern Scrollbar Styles for Sidebar */
+/* Modern Scrollbar Styles for Sidebar - Soft blue */
 .sidebar-scrollbar {
 	/* For Firefox */
 	scrollbar-width: thin;
-	scrollbar-color: rgba(27, 154, 170, 0.5) transparent;
+	scrollbar-color: oklch(0.62 0.10 240 / 0.5) transparent;
 }
 
 /* For Webkit browsers (Chrome, Safari, Edge) */
@@ -78,11 +124,11 @@
 }
 
 .sidebar-scrollbar::-webkit-scrollbar-thumb {
-	background: rgba(27, 154, 170, 0.4);
+	background: oklch(0.62 0.10 240 / 0.4);
 	border-radius: 10px;
 	transition: background 0.2s ease;
 }
 
 .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
-	background: rgba(27, 154, 170, 0.7);
+	background: oklch(0.62 0.10 240 / 0.7);
 }

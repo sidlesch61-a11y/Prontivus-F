@@ -1,171 +1,93 @@
 /**
- * Prontivus Design System - Medical-Grade Color Palette
- * Professional healthcare color system for medical credibility
+ * Healthcare Color Palette - Softer Blue Tones
+ * Preferred by both male and female consumers
+ * Used by health-related organizations like insurance and hospitals
  */
 
-export const colors = {
-  // Primary - Deep Medical Blue (#0F4C75)
-  primary: {
-    50: '#E6F1F7',
-    100: '#CCE3EF',
-    200: '#99C7DF',
-    300: '#66ABCF',
-    400: '#338FBF',
-    500: '#0F4C75', // Main primary - Deep Medical Blue
-    600: '#0C3D5E',
-    700: '#092E47',
-    800: '#061F31',
-    900: '#03101A',
-    950: '#01080D',
+// Primary Healthcare Colors - Softer Blue Tones
+export const HEALTHCARE_COLORS = {
+  // Primary Soft Blue - Preferred by both genders, calming, professional
+  blue: {
+    50: '#f0f7ff',   // Very soft blue
+    100: '#e0efff',  // Soft light blue
+    200: '#c7e2ff',  // Light blue
+    300: '#a5d0ff',  // Medium light blue
+    400: '#7db5ff',  // Medium blue
+    500: '#5b9eff',  // Primary soft blue
+    600: '#3d7ee8',  // Medium soft blue
+    700: '#2d62c4',  // Soft blue
+    800: '#264f9e',  // Deeper soft blue
+    900: '#25437d',  // Deep soft blue
+    primary: '#5b9eff', // Primary soft blue
+    light: '#7db5ff',   // Light soft blue
+    soft: '#a5d0ff',    // Very soft blue
+    deep: '#3d7ee8',    // Deeper soft blue
   },
   
-  // Primary Accent - Trust Teal (#1B9AAA)
-  primaryAccent: {
-    50: '#E6F5F7',
-    100: '#CCEBEF',
-    200: '#99D7DF',
-    300: '#66C3CF',
-    400: '#33AFBF',
-    500: '#1B9AAA', // Trust Teal
-    600: '#167A88',
-    700: '#115B66',
-    800: '#0B3D44',
-    900: '#061E22',
-    950: '#030F11',
+  // Teal - Calming, professional
+  teal: {
+    50: '#f0fdfa',
+    100: '#ccfbf1',
+    200: '#99f6e4',
+    300: '#5eead4',
+    400: '#2dd4bf',
+    500: '#14b8a6',
+    600: '#0d9488',
+    700: '#0f766e',
+    800: '#115e59',
+    900: '#134e4a',
+    primary: '#14b8a6',
+    light: '#5eead4',
+    cyan: '#06b6d4',
   },
   
-  // Secondary - Calm Slate (#5D737E)
-  secondary: {
-    50: '#F0F3F5',
-    100: '#E1E7EB',
-    200: '#C3CFD7',
-    300: '#A5B7C3',
-    400: '#879FAF',
-    500: '#5D737E', // Calm Slate
-    600: '#4A5C65',
-    700: '#38454C',
-    800: '#252E33',
-    900: '#131719',
-    950: '#090B0D',
+  // Green - Positive, healing
+  green: {
+    50: '#f0fdf4',
+    100: '#dcfce7',
+    200: '#bbf7d0',
+    300: '#86efac',
+    400: '#4ade80',
+    500: '#22c55e',
+    600: '#16a34a',
+    700: '#15803d',
+    800: '#166534',
+    900: '#14532d',
+    primary: '#10b981', // Emerald
+    light: '#4ade80',
   },
   
-  // Success - Medical Green (#16C79A)
-  success: {
-    50: '#E6F9F5',
-    100: '#CCF3EB',
-    200: '#99E7D7',
-    300: '#66DBC3',
-    400: '#33CFAF',
-    500: '#16C79A', // Success Green
-    600: '#129F7B',
-    700: '#0D775C',
-    800: '#09503E',
-    900: '#04281F',
-    950: '#021410',
+  // Chart colors for data visualization - Softer blue tones
+  chart: {
+    primary: '#5b9eff',      // Soft blue - primary
+    secondary: '#7db5ff',       // Light soft blue
+    accent: '#a5d0ff',          // Very soft blue
+    info: '#3d7ee8',            // Medium soft blue
+    blue: '#5b9eff',            // Primary soft blue
+    blueLight: '#a5d0ff',       // Light soft blue
+    blueMedium: '#7db5ff',      // Medium soft blue
+    blueDeep: '#3d7ee8',        // Deeper soft blue
+    softBlue1: '#c7e2ff',       // Very light soft blue
+    softBlue2: '#e0efff',       // Extremely light soft blue
+    green: '#4ade80',           // Soft green for success
+    danger: '#ef4444',          // Red for errors/warnings (keep for critical alerts)
   },
   
-  // Accent - Warm Coral (#FF6B6B) for alerts/actions
-  accent: {
-    50: '#FFF0F0',
-    100: '#FFE1E1',
-    200: '#FFC3C3',
-    300: '#FFA5A5',
-    400: '#FF8787',
-    500: '#FF6B6B', // Warm Coral
-    600: '#CC5656',
-    700: '#994040',
-    800: '#662B2B',
-    900: '#331515',
-    950: '#1A0A0A',
-  },
-  
-  // Neutrals - Sophisticated Grays
-  neutral: {
-    50: '#FAFBFC', // Off-white background
-    100: '#F5F6F7',
-    200: '#EDEFF2',
-    300: '#E2E5EA',
-    400: '#CBD0D8',
-    500: '#718096', // Medium gray
-    600: '#4A5568', // Dark gray
-    700: '#2D3748', // Very dark gray
-    800: '#1A202C',
-    900: '#171923',
-    950: '#0D1117',
-  },
-  
-  // Medical semantic colors
-  medical: {
-    // Status indicators
-    critical: '#DC2626',    // Critical alert red
-    warning: '#F59E0B',    // Warning amber
-    info: '#1B9AAA',       // Info teal
-    success: '#16C79A',    // Success green
-    
-    // Medical context colors
-    vitalSigns: '#0F4C75', // Blood pressure, etc.
-    medication: '#1B9AAA',  // Medication teal
-    procedure: '#5D737E',  // Procedure slate
-    diagnosis: '#16C79A',  // Diagnosis green
+  // Legacy support - map old colors to new
+  legacy: {
+    primary: '#0F4C75', // Deep blue
+    secondary: '#1B9AAA', // Teal variant
   },
 } as const;
 
-// Export individual color values for easy access
-export const colorTokens = {
-  // Primary colors
-  primary: colors.primary[500],
-  primaryLight: colors.primary[400],
-  primaryDark: colors.primary[600],
-  primaryAccent: colors.primaryAccent[500],
-  
-  // Secondary colors
-  secondary: colors.secondary[500],
-  secondaryLight: colors.secondary[400],
-  secondaryDark: colors.secondary[600],
-  
-  // Semantic colors
-  success: colors.success[500],
-  accent: colors.accent[500],
-  
-  // Background colors
-  background: colors.neutral[50],
-  backgroundElevated: '#FFFFFF',
-  backgroundMuted: colors.neutral[100],
-  
-  // Text colors
-  text: {
-    primary: colors.neutral[700],
-    secondary: colors.neutral[600],
-    muted: colors.neutral[500],
-    inverse: colors.neutral[50],
-    disabled: colors.neutral[400],
-  },
-  
-  // Border colors
-  border: colors.neutral[200],
-  borderMuted: colors.neutral[100],
-  borderStrong: colors.neutral[300],
-  
-  // Medical context
-  medical: colors.medical,
-} as const;
-
-// Color contrast ratios (WCAG 2.1 AA compliance)
-export const contrastRatios = {
-  // Primary colors on white
-  primaryOnWhite: 7.1, // #0F4C75 on #FFFFFF - AAA
-  primaryAccentOnWhite: 4.5, // #1B9AAA on #FFFFFF - AA
-  
-  // Text on backgrounds
-  textOnBackground: 7.8, // #2D3748 on #FAFBFC - AAA
-  textMutedOnBackground: 4.9, // #718096 on #FAFBFC - AA
-  
-  // Success on white
-  successOnWhite: 4.9, // #16C79A on #FFFFFF - AA
-  
-  // Accent on white
-  accentOnWhite: 4.2, // #FF6B6B on #FFFFFF - AA
-} as const;
-
-export type ColorPalette = typeof colors;
-export type ColorToken = typeof colorTokens;
+// Helper function to get healthcare color
+export function getHealthcareColor(
+  color: 'blue' | 'teal' | 'green',
+  shade: 50 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 'primary' | 'light' | 'deep' | 'cyan' = 500
+): string {
+  const colorGroup = HEALTHCARE_COLORS[color];
+  if (typeof shade === 'number') {
+    return colorGroup[shade];
+  }
+  return (colorGroup as any)[shade] || colorGroup[500];
+}

@@ -25,8 +25,13 @@ import {
   Zap,
   CheckCircle,
   XCircle,
-  AlertTriangle
+  AlertTriangle,
+  FileCode,
+  TrendingUp,
+  Activity,
+  Sparkles
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface TissAutomation {
   id: string;
@@ -34,8 +39,8 @@ interface TissAutomation {
   description: string;
   isActive: boolean;
   triggerType: 'daily' | 'weekly' | 'monthly' | 'invoice_created' | 'appointment_completed';
-  triggerTime?: string; // For scheduled triggers
-  triggerDay?: number; // For weekly/monthly triggers
+  triggerTime?: string;
+  triggerDay?: number;
   conditions: {
     status?: string[];
     dateRange?: {
@@ -115,12 +120,10 @@ export default function TissAutomationPage() {
   const loadAutomations = async () => {
     setLoading(true);
     try {
-      // Load from localStorage (in a real app, this would be from the backend)
       const savedAutomations = localStorage.getItem('tiss-automations');
       if (savedAutomations) {
         setAutomations(JSON.parse(savedAutomations));
       } else {
-        // Load default automations
         const defaultAutomations: TissAutomation[] = [
           {
             id: "1",
@@ -189,7 +192,6 @@ export default function TissAutomationPage() {
       let updatedAutomations;
       
       if (editingAutomation) {
-        // Update existing automation
         updatedAutomations = automations.map(automation => 
           automation.id === editingAutomation.id 
             ? { 
@@ -200,7 +202,6 @@ export default function TissAutomationPage() {
             : automation
         );
       } else {
-        // Add new automation
         const { id, ...formDataWithoutId } = formData as TissAutomation;
         const newAutomation: TissAutomation = {
           id: Date.now().toString(),
@@ -286,9 +287,8 @@ export default function TissAutomationPage() {
   };
 
   const handleRunNow = (id: string) => {
-    // Simulate running automation
     const updatedAutomations = automations.map(automation => 
-      automation.id === id 
+      automation.id === id
         ? { 
             ...automation, 
             lastRun: new Date().toISOString(),
@@ -307,7 +307,7 @@ export default function TissAutomationPage() {
   const getStatusBadge = (automation: TissAutomation) => {
     if (!automation.isActive) {
       return (
-        <Badge variant="secondary" className="flex items-center gap-1">
+        <Badge variant="secondary" className="flex items-center gap-1 bg-gray-100 text-gray-700">
           <Pause className="h-3 w-3" />
           Pausada
         </Badge>
@@ -318,14 +318,14 @@ export default function TissAutomationPage() {
     
     if (successRate >= 90) {
       return (
-        <Badge variant="default" className="flex items-center gap-1">
+        <Badge className="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-600">
           <CheckCircle className="h-3 w-3" />
           Ativa
         </Badge>
       );
     } else if (successRate >= 70) {
       return (
-        <Badge variant="secondary" className="flex items-center gap-1">
+        <Badge className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600">
           <AlertTriangle className="h-3 w-3" />
           Com Avisos
         </Badge>
@@ -346,6 +346,11 @@ export default function TissAutomationPage() {
     automation.triggerType.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const totalRuns = automations.reduce((sum, a) => sum + a.runCount, 0);
+  const totalSuccess = automations.reduce((sum, a) => sum + a.successCount, 0);
+  const successRate = totalRuns > 0 ? Math.round((totalSuccess / totalRuns) * 100) : 0;
+  const activeCount = automations.filter(a => a.isActive).length;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -355,338 +360,382 @@ export default function TissAutomationPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Automação TISS XML</h1>
-          <p className="text-muted-foreground">
-            Configure automações para geração automática de arquivos TISS XML
-          </p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nova Automação
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {editingAutomation ? "Editar Automação TISS" : "Nova Automação TISS"}
-              </DialogTitle>
-              <DialogDescription>
-                {editingAutomation ? "Atualize as configurações da automação" : "Configure uma nova automação para TISS XML"}
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-cyan-50">
+      <div className="container mx-auto p-4 md:p-6 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 text-white">
+                <Zap className="h-6 w-6" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Automação TISS XML</h1>
+                <p className="text-gray-600">
+                  Configure automações para geração automática de arquivos TISS XML
+                </p>
+              </div>
+            </div>
+          </div>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button 
+                onClick={resetForm}
+                className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-lg"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nova Automação
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingAutomation ? "Editar Automação TISS" : "Nova Automação TISS"}
+                </DialogTitle>
+                <DialogDescription>
+                  {editingAutomation ? "Atualize as configurações da automação" : "Configure uma nova automação para TISS XML"}
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="name">Nome da Automação</Label>
+                    <Input
+                      id="name"
+                      value={formData.name || ""}
+                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      placeholder="Ex: Geração Diária TISS"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="triggerType">Tipo de Disparo</Label>
+                    <Select
+                      value={formData.triggerType || "daily"}
+                      onValueChange={(value) => setFormData({...formData, triggerType: value as any})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(TRIGGER_TYPES).map(([code, name]) => (
+                          <SelectItem key={code} value={code}>
+                            {name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                
                 <div>
-                  <Label htmlFor="name">Nome da Automação</Label>
-                  <Input
-                    id="name"
-                    value={formData.name || ""}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    placeholder="Ex: Geração Diária TISS"
+                  <Label htmlFor="description">Descrição</Label>
+                  <Textarea
+                    id="description"
+                    value={formData.description || ""}
+                    onChange={(e) => setFormData({...formData, description: e.target.value})}
+                    placeholder="Descrição da automação"
+                    rows={2}
                   />
                 </div>
+
+                {(formData.triggerType === 'daily' || formData.triggerType === 'weekly' || formData.triggerType === 'monthly') && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="triggerTime">Horário</Label>
+                      <Input
+                        id="triggerTime"
+                        type="time"
+                        value={formData.triggerTime || "09:00"}
+                        onChange={(e) => setFormData({...formData, triggerTime: e.target.value})}
+                      />
+                    </div>
+                    {(formData.triggerType === 'weekly' || formData.triggerType === 'monthly') && (
+                      <div>
+                        <Label htmlFor="triggerDay">Dia</Label>
+                        <Select
+                          value={formData.triggerDay?.toString() || "1"}
+                          onValueChange={(value) => setFormData({...formData, triggerDay: parseInt(value)})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(TRIGGER_DAYS).map(([code, name]) => (
+                              <SelectItem key={code} value={code}>
+                                {name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div>
-                  <Label htmlFor="triggerType">Tipo de Disparo</Label>
-                  <Select
-                    value={formData.triggerType || "daily"}
-                    onValueChange={(value) => setFormData({...formData, triggerType: value as any})}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(TRIGGER_TYPES).map(([code, name]) => (
-                        <SelectItem key={code} value={code}>
-                          {name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Ações</Label>
+                  <div className="space-y-2 mt-2">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="generateTissXml"
+                        checked={formData.actions?.generateTissXml || false}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          actions: {
+                            ...formData.actions!,
+                            generateTissXml: e.target.checked
+                          }
+                        })}
+                        aria-label="Gerar TISS XML"
+                        title="Gerar TISS XML"
+                      />
+                      <Label htmlFor="generateTissXml" className="cursor-pointer">Gerar TISS XML</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="sendEmail"
+                        checked={formData.actions?.sendEmail || false}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          actions: {
+                            ...formData.actions!,
+                            sendEmail: e.target.checked
+                          }
+                        })}
+                        aria-label="Enviar por Email"
+                        title="Enviar por Email"
+                      />
+                      <Label htmlFor="sendEmail" className="cursor-pointer">Enviar por Email</Label>
+                    </div>
+                  </div>
                 </div>
+
+                {formData.actions?.sendEmail && (
+                  <div>
+                    <Label htmlFor="emailRecipients">Destinatários (separados por vírgula)</Label>
+                    <Input
+                      id="emailRecipients"
+                      value={formData.actions?.emailRecipients?.join(', ') || ""}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        actions: {
+                          ...formData.actions!,
+                          emailRecipients: e.target.value.split(',').map(email => email.trim()).filter(email => email)
+                        }
+                      })}
+                      placeholder="email1@exemplo.com, email2@exemplo.com"
+                    />
+                  </div>
+                )}
               </div>
               
-              <div>
-                <Label htmlFor="description">Descrição</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description || ""}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
-                  placeholder="Descrição da automação"
-                  rows={2}
-                />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleSave} className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
+                  {editingAutomation ? "Atualizar" : "Criar"}
+                </Button>
               </div>
+            </DialogContent>
+          </Dialog>
+        </div>
 
-              {(formData.triggerType === 'daily' || formData.triggerType === 'weekly' || formData.triggerType === 'monthly') && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="triggerTime">Horário</Label>
-                    <Input
-                      id="triggerTime"
-                      type="time"
-                      value={formData.triggerTime || "09:00"}
-                      onChange={(e) => setFormData({...formData, triggerTime: e.target.value})}
-                    />
-                  </div>
-                  {(formData.triggerType === 'weekly' || formData.triggerType === 'monthly') && (
-                    <div>
-                      <Label htmlFor="triggerDay">Dia</Label>
-                      <Select
-                        value={formData.triggerDay?.toString() || "1"}
-                        onValueChange={(value) => setFormData({...formData, triggerDay: parseInt(value)})}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(TRIGGER_DAYS).map(([code, name]) => (
-                            <SelectItem key={code} value={code}>
-                              {name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-              )}
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-white/90">Total Automações</CardTitle>
+              <Zap className="h-5 w-5 text-white/80" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{automations.length}</div>
+              <p className="text-xs text-white/80 mt-1">Configurações ativas</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-500 to-emerald-600 text-white">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-white/90">Ativas</CardTitle>
+              <CheckCircle className="h-5 w-5 text-white/80" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{activeCount}</div>
+              <p className="text-xs text-white/80 mt-1">Em execução</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-white/90">Execuções</CardTitle>
+              <Activity className="h-5 w-5 text-white/80" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{totalRuns}</div>
+              <p className="text-xs text-white/80 mt-1">Total de execuções</p>
+            </CardContent>
+          </Card>
+          
+          <Card className="border-0 shadow-lg bg-gradient-to-br from-cyan-500 to-cyan-600 text-white">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-white/90">Taxa de Sucesso</CardTitle>
+              <TrendingUp className="h-5 w-5 text-white/80" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{successRate}%</div>
+              <p className="text-xs text-white/80 mt-1">Taxa de sucesso</p>
+            </CardContent>
+          </Card>
+        </div>
 
-              <div>
-                <Label>Condições</Label>
-                <div className="space-y-2 mt-2">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="generateTissXml"
-                      checked={formData.actions?.generateTissXml || false}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        actions: {
-                          ...formData.actions!,
-                          generateTissXml: e.target.checked
-                        }
-                      })}
-                    />
-                    <Label htmlFor="generateTissXml">Gerar TISS XML</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="sendEmail"
-                      checked={formData.actions?.sendEmail || false}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        actions: {
-                          ...formData.actions!,
-                          sendEmail: e.target.checked
-                        }
-                      })}
-                    />
-                    <Label htmlFor="sendEmail">Enviar por Email</Label>
-                  </div>
-                </div>
-              </div>
+        {/* Search */}
+        <Card className="border-0 shadow-md">
+          <CardContent className="pt-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Buscar automações por nome, descrição ou tipo..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 border-gray-200 focus:border-blue-500"
+              />
+            </div>
+          </CardContent>
+        </Card>
 
-              {formData.actions?.sendEmail && (
-                <div>
-                  <Label htmlFor="emailRecipients">Destinatários (separados por vírgula)</Label>
-                  <Input
-                    id="emailRecipients"
-                    value={formData.actions?.emailRecipients?.join(', ') || ""}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      actions: {
-                        ...formData.actions!,
-                        emailRecipients: e.target.value.split(',').map(email => email.trim()).filter(email => email)
-                      }
-                    })}
-                    placeholder="email1@exemplo.com, email2@exemplo.com"
-                  />
-                </div>
-              )}
+        {/* Automations Table */}
+        <Card className="border-0 shadow-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileCode className="h-5 w-5 text-blue-600" />
+              Automações TISS ({filteredAutomations.length})
+            </CardTitle>
+            <CardDescription>
+              Lista de automações configuradas para TISS XML
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-gray-50">
+                    <TableHead className="font-semibold">Nome</TableHead>
+                    <TableHead className="font-semibold">Tipo</TableHead>
+                    <TableHead className="font-semibold">Status</TableHead>
+                    <TableHead className="font-semibold">Última Execução</TableHead>
+                    <TableHead className="font-semibold">Execuções</TableHead>
+                    <TableHead className="font-semibold">Taxa Sucesso</TableHead>
+                    <TableHead className="font-semibold text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredAutomations.map((automation) => {
+                    const successRate = automation.runCount > 0 
+                      ? Math.round((automation.successCount / automation.runCount) * 100) 
+                      : 0;
+                    
+                    return (
+                      <TableRow key={automation.id} className="hover:bg-blue-50/50">
+                        <TableCell>
+                          <div>
+                            <div className="font-medium text-gray-900">{automation.name}</div>
+                            <div className="text-sm text-gray-500 mt-1">
+                              {automation.description}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                            {TRIGGER_TYPES[automation.triggerType]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(automation)}</TableCell>
+                        <TableCell className="text-gray-600">
+                          {automation.lastRun ? 
+                            new Date(automation.lastRun).toLocaleString('pt-BR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            }) : 
+                            <span className="text-gray-400">Nunca executada</span>
+                          }
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium">{automation.runCount}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "font-medium",
+                              successRate >= 90 ? "text-emerald-600" :
+                              successRate >= 70 ? "text-amber-600" : "text-red-600"
+                            )}>
+                              {successRate}%
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleToggleActive(automation.id)}
+                              title={automation.isActive ? "Pausar" : "Ativar"}
+                              className="h-8 w-8 p-0"
+                            >
+                              {automation.isActive ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRunNow(automation.id)}
+                              title="Executar agora"
+                              className="h-8 w-8 p-0"
+                            >
+                              <Play className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEdit(automation)}
+                              title="Editar automação"
+                              className="h-8 w-8 p-0"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDelete(automation.id)}
+                              title="Excluir automação"
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </div>
             
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSave}>
-                {editingAutomation ? "Atualizar" : "Criar"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Automações</CardTitle>
-            <Zap className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{automations.length}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ativas</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {automations.filter(a => a.isActive).length}
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Execuções</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {automations.reduce((sum, a) => sum + a.runCount, 0)}
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Taxa de Sucesso</CardTitle>
-            <Settings className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {automations.length > 0 ? 
-                Math.round((automations.reduce((sum, a) => sum + a.successCount, 0) / 
-                automations.reduce((sum, a) => sum + a.runCount, 0)) * 100) || 0 : 0}%
-            </div>
+            {filteredAutomations.length === 0 && (
+              <div className="text-center py-12 text-gray-500">
+                <FileCode className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p className="text-lg font-medium">Nenhuma automação TISS encontrada</p>
+                <p className="text-sm mt-2">Crie uma nova automação para começar</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
-
-      {/* Search */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar automações por nome, descrição ou tipo..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Automations Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Automações TISS ({filteredAutomations.length})</CardTitle>
-          <CardDescription>
-            Lista de automações configuradas para TISS XML
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Última Execução</TableHead>
-                <TableHead>Execuções</TableHead>
-                <TableHead>Taxa Sucesso</TableHead>
-                <TableHead>Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredAutomations.map((automation) => (
-                <TableRow key={automation.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{automation.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {automation.description}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {TRIGGER_TYPES[automation.triggerType]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{getStatusBadge(automation)}</TableCell>
-                  <TableCell>
-                    {automation.lastRun ? 
-                      new Date(automation.lastRun).toLocaleString('pt-BR') : 
-                      'Nunca executada'
-                    }
-                  </TableCell>
-                  <TableCell>{automation.runCount}</TableCell>
-                  <TableCell>
-                    {automation.runCount > 0 ? 
-                      Math.round((automation.successCount / automation.runCount) * 100) : 0}%
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleToggleActive(automation.id)}
-                        title={automation.isActive ? "Pausar" : "Ativar"}
-                      >
-                        {automation.isActive ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleRunNow(automation.id)}
-                        title="Executar agora"
-                      >
-                        <Play className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(automation)}
-                        title="Editar automação"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(automation.id)}
-                        title="Excluir automação"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          
-          {filteredAutomations.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              Nenhuma automação TISS encontrada.
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

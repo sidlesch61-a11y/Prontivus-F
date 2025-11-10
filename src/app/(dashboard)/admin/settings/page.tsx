@@ -8,15 +8,33 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
- 
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { 
   Settings,
   Save,
   RefreshCw,
-  Lock
+  Lock,
+  Building2,
+  Mail,
+  Phone,
+  MapPin,
+  Users,
+  Key,
+  Package,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Shield,
+  Activity,
+  AlertCircle
 } from "lucide-react";
 import { adminApi } from "@/lib/admin-api";
+import { cn } from "@/lib/utils";
 
 interface SystemSettings {
   clinicName: string;
@@ -29,19 +47,87 @@ interface SystemSettings {
 }
 
 const AVAILABLE_MODULES = [
-  { id: "patients", name: "Patient Management", description: "Patient registration and management" },
-  { id: "appointments", name: "Appointment Management", description: "Scheduling and appointment system" },
-  { id: "clinical", name: "Clinical Records", description: "Medical records and SOAP notes" },
-  { id: "financial", name: "Financial Management", description: "Billing and invoicing" },
-  { id: "stock", name: "Stock Management", description: "Inventory management" },
-  { id: "bi", name: "Business Intelligence", description: "Analytics and reporting" },
-  { id: "procedures", name: "Procedure Management", description: "Medical procedures" },
-  { id: "tiss", name: "TISS Integration", description: "Health insurance integration" },
-  { id: "mobile", name: "Mobile App Access", description: "Mobile application access" },
-  { id: "telemed", name: "Telemedicine", description: "Remote consultations" },
+  { 
+    id: "patients", 
+    name: "Gestão de Pacientes", 
+    description: "Cadastro e gestão de pacientes",
+    icon: "👥",
+    category: "core"
+  },
+  { 
+    id: "appointments", 
+    name: "Agendamentos", 
+    description: "Sistema de agendamento e consultas",
+    icon: "📅",
+    category: "core"
+  },
+  { 
+    id: "clinical", 
+    name: "Prontuários Clínicos", 
+    description: "Registros médicos e anotações SOAP",
+    icon: "📋",
+    category: "clinical"
+  },
+  { 
+    id: "financial", 
+    name: "Gestão Financeira", 
+    description: "Faturamento e cobrança",
+    icon: "💰",
+    category: "financial"
+  },
+  { 
+    id: "stock", 
+    name: "Gestão de Estoque", 
+    description: "Controle de inventário",
+    icon: "📦",
+    category: "operational"
+  },
+  { 
+    id: "bi", 
+    name: "Business Intelligence", 
+    description: "Analytics e relatórios",
+    icon: "📊",
+    category: "analytics"
+  },
+  { 
+    id: "procedures", 
+    name: "Gestão de Procedimentos", 
+    description: "Procedimentos médicos",
+    icon: "⚕️",
+    category: "clinical"
+  },
+  { 
+    id: "tiss", 
+    name: "Integração TISS", 
+    description: "Integração com planos de saúde",
+    icon: "🏥",
+    category: "integration"
+  },
+  { 
+    id: "mobile", 
+    name: "Acesso Mobile", 
+    description: "Acesso via aplicativo móvel",
+    icon: "📱",
+    category: "access"
+  },
+  { 
+    id: "telemed", 
+    name: "Telemedicina", 
+    description: "Consultas remotas",
+    icon: "💻",
+    category: "clinical"
+  },
 ];
 
- 
+const MODULE_CATEGORIES = {
+  core: "Núcleo",
+  clinical: "Clínico",
+  financial: "Financeiro",
+  operational: "Operacional",
+  analytics: "Analytics",
+  integration: "Integração",
+  access: "Acesso"
+};
 
 export default function AdminSettingsPage() {
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -80,7 +166,6 @@ export default function AdminSettingsPage() {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      // Load current clinic data
       const clinicId = user?.clinic_id;
       if (!clinicId) throw new Error("Missing clinic id");
       const clinic = await adminApi.getClinic(clinicId);
@@ -90,15 +175,15 @@ export default function AdminSettingsPage() {
         clinicEmail: clinic.email || "",
         clinicPhone: clinic.phone || "",
         clinicAddress: clinic.address || "",
-        // License
         licenseKey: clinic.license_key || "",
         maxUsers: clinic.max_users || 10,
         activeModules: clinic.active_modules || [],
       }));
+      setHasChanges(false);
       setLoading(false);
     } catch (error) {
       console.error("Failed to load settings:", error);
-      toast.error("Failed to load settings");
+      toast.error("Falha ao carregar configurações");
       setLoading(false);
     }
   };
@@ -118,10 +203,10 @@ export default function AdminSettingsPage() {
         active_modules: settings.activeModules,
       });
       setHasChanges(false);
-      toast.success("Settings saved successfully");
+      toast.success("Configurações salvas com sucesso");
     } catch (error) {
       console.error("Failed to save settings:", error);
-      toast.error("Failed to save settings");
+      toast.error("Falha ao salvar configurações");
     } finally {
       setSaving(false);
     }
@@ -140,25 +225,51 @@ export default function AdminSettingsPage() {
     handleSettingChange("activeModules", newModules);
   };
 
+  // Group modules by category
+  const modulesByCategory = AVAILABLE_MODULES.reduce((acc, module) => {
+    if (!acc[module.category]) {
+      acc[module.category] = [];
+    }
+    acc[module.category].push(module);
+    return acc;
+  }, {} as Record<string, typeof AVAILABLE_MODULES>);
+
+  // Calculate statistics
+  const stats = {
+    totalModules: AVAILABLE_MODULES.length,
+    activeModules: settings.activeModules.length,
+    inactiveModules: AVAILABLE_MODULES.length - settings.activeModules.length,
+    utilizationRate: Math.round((settings.activeModules.length / AVAILABLE_MODULES.length) * 100),
+  };
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <Skeleton className="h-96 w-full" />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+      {/* Modern Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Settings className="h-8 w-8" />
-            System Settings
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Settings className="h-7 w-7 text-blue-600" />
+            </div>
+            Configurações do Sistema
           </h1>
-          <p className="text-muted-foreground mt-2">
-            Configure system-wide settings and preferences
+          <p className="text-muted-foreground mt-2 text-sm">
+            Gerencie as configurações gerais da clínica e módulos ativos
           </p>
         </div>
         <div className="flex gap-2">
@@ -166,135 +277,361 @@ export default function AdminSettingsPage() {
             variant="outline"
             onClick={loadSettings}
             disabled={loading}
+            className="border-blue-300 text-blue-700 hover:bg-blue-50"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
+            Atualizar
           </Button>
           <Button
             onClick={handleSave}
             disabled={saving || !hasChanges}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
           >
-            <Save className="h-4 w-4 mr-2" />
-            {saving ? "Saving..." : "Save Changes"}
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Salvando...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Salvar Alterações
+              </>
+            )}
           </Button>
         </div>
       </div>
 
-      {/* General Settings (DB-backed) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">General Settings</CardTitle>
-          <CardDescription>Basic clinic information</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="clinicName">Clinic Name</Label>
-              <Input
-                id="clinicName"
-                value={settings.clinicName}
-                onChange={(e) => handleSettingChange("clinicName", e.target.value)}
-                placeholder="Enter clinic name"
-              />
-            </div>
-            <div>
-              <Label htmlFor="clinicEmail">Email</Label>
-              <Input
-                id="clinicEmail"
-                type="email"
-                value={settings.clinicEmail}
-                onChange={(e) => handleSettingChange("clinicEmail", e.target.value)}
-                placeholder="Enter clinic email"
-              />
-            </div>
-            <div>
-              <Label htmlFor="clinicPhone">Phone</Label>
-              <Input
-                id="clinicPhone"
-                value={settings.clinicPhone}
-                onChange={(e) => handleSettingChange("clinicPhone", e.target.value)}
-                placeholder="Enter clinic phone"
-              />
-            </div>
-            {/* Removed non-DB-backed timezone and language */}
-          </div>
-          <div>
-            <Label htmlFor="clinicAddress">Address</Label>
-            <Textarea
-              id="clinicAddress"
-              value={settings.clinicAddress}
-              onChange={(e) => handleSettingChange("clinicAddress", e.target.value)}
-              placeholder="Enter clinic address"
-              rows={3}
-            />
-          </div>
-        </CardContent>
-      </Card>
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Módulos Ativos
+            </CardTitle>
+            <Package className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.activeModules}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              de {stats.totalModules} disponíveis
+            </p>
+          </CardContent>
+        </Card>
 
-      {/* Removed non-DB-backed Security Settings */}
+        <Card className="border-l-4 border-l-green-500 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Taxa de Utilização
+            </CardTitle>
+            <Activity className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.utilizationRate}%</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              módulos em uso
+            </p>
+          </CardContent>
+        </Card>
 
-      {/* Removed non-DB-backed Notification Settings */}
+        <Card className="border-l-4 border-l-purple-500 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Usuários Máximos
+            </CardTitle>
+            <Users className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{settings.maxUsers}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              limite de usuários
+            </p>
+          </CardContent>
+        </Card>
 
-      {/* Removed non-DB-backed System Settings */}
+        <Card className="border-l-4 border-l-orange-500 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Módulos Inativos
+            </CardTitle>
+            <XCircle className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.inactiveModules}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              disponíveis para ativação
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* License Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Lock className="h-5 w-5" />
-            License Settings
-          </CardTitle>
-          <CardDescription>
-            Manage license information and active modules
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="licenseKey">License Key</Label>
-              <Input
-                id="licenseKey"
-                value={settings.licenseKey}
-                onChange={(e) => handleSettingChange("licenseKey", e.target.value)}
-                placeholder="Enter license key"
-              />
-            </div>
-            <div>
-              <Label htmlFor="maxUsers">Maximum Users</Label>
-              <Input
-                id="maxUsers"
-                type="number"
-                value={settings.maxUsers}
-                onChange={(e) => handleSettingChange("maxUsers", parseInt(e.target.value))}
-                min="1"
-                max="1000"
-              />
-            </div>
-          </div>
-          <div>
-            <Label>Active Modules</Label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-              {AVAILABLE_MODULES.map((module) => (
-                <div key={module.id} className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id={`module-${module.id}`}
-                    checked={settings.activeModules.includes(module.id)}
-                    onChange={() => toggleModule(module.id)}
-                    className="rounded border-gray-300"
-                    aria-label={`Toggle ${module.name} module`}
-                  />
-                  <Label htmlFor={`module-${module.id}`} className="text-sm">
-                    {module.name}
+      {/* Tabs for Organization */}
+      <Tabs defaultValue="general" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 gap-2 h-auto p-1 bg-muted/50">
+          <TabsTrigger 
+            value="general" 
+            className="data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md flex items-center gap-2"
+          >
+            <Building2 className="h-4 w-4" />
+            <span>Informações Gerais</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="license" 
+            className="data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md flex items-center gap-2"
+          >
+            <Shield className="h-4 w-4" />
+            <span>Licença e Módulos</span>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* General Settings Tab */}
+        <TabsContent value="general" className="space-y-6">
+          <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-blue-600">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Building2 className="h-5 w-5" />
+                    </div>
+                    Informações da Clínica
+                  </CardTitle>
+                  <CardDescription className="mt-2">
+                    Configure as informações básicas da clínica
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  <Building2 className="h-3 w-3 mr-1" />
+                  Geral
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="clinicName" className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-blue-600" />
+                    Nome da Clínica
                   </Label>
+                  <Input
+                    id="clinicName"
+                    value={settings.clinicName}
+                    onChange={(e) => handleSettingChange("clinicName", e.target.value)}
+                    placeholder="Digite o nome da clínica"
+                    className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="clinicEmail" className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-blue-600" />
+                    E-mail
+                  </Label>
+                  <Input
+                    id="clinicEmail"
+                    type="email"
+                    value={settings.clinicEmail}
+                    onChange={(e) => handleSettingChange("clinicEmail", e.target.value)}
+                    placeholder="contato@clinica.com"
+                    className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="clinicPhone" className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-blue-600" />
+                    Telefone
+                  </Label>
+                  <Input
+                    id="clinicPhone"
+                    value={settings.clinicPhone}
+                    onChange={(e) => handleSettingChange("clinicPhone", e.target.value)}
+                    placeholder="(11) 99999-9999"
+                    className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="maxUsers" className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-blue-600" />
+                    Limite de Usuários
+                  </Label>
+                  <Input
+                    id="maxUsers"
+                    type="number"
+                    value={settings.maxUsers}
+                    onChange={(e) => handleSettingChange("maxUsers", parseInt(e.target.value) || 1)}
+                    min="1"
+                    max="1000"
+                    className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Número máximo de usuários permitidos no sistema
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="clinicAddress" className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-blue-600" />
+                  Endereço
+                </Label>
+                <Textarea
+                  id="clinicAddress"
+                  value={settings.clinicAddress}
+                  onChange={(e) => handleSettingChange("clinicAddress", e.target.value)}
+                  placeholder="Digite o endereço completo da clínica"
+                  rows={3}
+                  className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* License and Modules Tab */}
+        <TabsContent value="license" className="space-y-6">
+          {/* License Settings */}
+          <Card className="border-l-4 border-l-blue-700 hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-blue-700">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Lock className="h-5 w-5" />
+                    </div>
+                    Configurações de Licença
+                  </CardTitle>
+                  <CardDescription className="mt-2">
+                    Gerencie informações de licenciamento do sistema
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  <Shield className="h-3 w-3 mr-1" />
+                  Licença
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="licenseKey" className="flex items-center gap-2">
+                    <Key className="h-4 w-4 text-blue-600" />
+                    Chave de Licença
+                  </Label>
+                  <Input
+                    id="licenseKey"
+                    value={settings.licenseKey}
+                    onChange={(e) => handleSettingChange("licenseKey", e.target.value)}
+                    placeholder="Digite a chave de licença"
+                    className="border-blue-200 focus:border-blue-500 focus:ring-blue-500 font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Chave única de licenciamento do sistema
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="maxUsersLicense" className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-blue-600" />
+                    Limite de Usuários (Licença)
+                  </Label>
+                  <Input
+                    id="maxUsersLicense"
+                    type="number"
+                    value={settings.maxUsers}
+                    onChange={(e) => handleSettingChange("maxUsers", parseInt(e.target.value) || 1)}
+                    min="1"
+                    max="1000"
+                    className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                    disabled
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Definido pela licença
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Active Modules */}
+          <Card className="border-l-4 border-l-blue-600 hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-blue-600">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Package className="h-5 w-5" />
+                    </div>
+                    Módulos do Sistema
+                  </CardTitle>
+                  <CardDescription className="mt-2">
+                    Ative ou desative módulos do sistema conforme necessário
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  <Package className="h-3 w-3 mr-1" />
+                  {stats.activeModules} Ativos
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {Object.entries(modulesByCategory).map(([category, modules]) => (
+                <div key={category} className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Separator className="flex-1" />
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                      {MODULE_CATEGORIES[category as keyof typeof MODULE_CATEGORIES] || category}
+                    </Badge>
+                    <Separator className="flex-1" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {modules.map((module) => {
+                      const isActive = settings.activeModules.includes(module.id);
+                      return (
+                        <div
+                          key={module.id}
+                          className={cn(
+                            "relative p-4 rounded-lg border-2 transition-all cursor-pointer",
+                            isActive
+                              ? "border-blue-500 bg-blue-50/50 hover:bg-blue-50 hover:shadow-md"
+                              : "border-gray-200 bg-gray-50/50 hover:bg-gray-50 hover:border-gray-300"
+                          )}
+                          onClick={() => toggleModule(module.id)}
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className={cn(
+                                "text-2xl p-2 rounded-lg",
+                                isActive ? "bg-blue-100" : "bg-gray-100"
+                              )}>
+                                {module.icon}
+                              </div>
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-sm text-gray-900">
+                                  {module.name}
+                                </h4>
+                              </div>
+                            </div>
+                            <Switch
+                              checked={isActive}
+                              onCheckedChange={() => toggleModule(module.id)}
+                              className="ml-2"
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            {module.description}
+                          </p>
+                          {isActive && (
+                            <div className="absolute top-2 right-2">
+                              <CheckCircle2 className="h-5 w-5 text-blue-600" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Removed non-DB-backed System Status */}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

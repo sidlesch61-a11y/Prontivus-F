@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -37,6 +37,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import {
   PlusCircle,
   Edit,
@@ -49,6 +51,15 @@ import {
   Settings,
   Plus,
   Minus,
+  Activity,
+  TrendingUp,
+  FileText,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  Filter,
+  MoreVertical,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { proceduresApi } from "@/lib/procedures-api";
@@ -61,6 +72,25 @@ import {
   ProcedureProductCreate,
   Product,
 } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function ProceduresPage() {
   const [procedures, setProcedures] = useState<Procedure[]>([]);
@@ -68,6 +98,8 @@ export default function ProceduresPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilter, setActiveFilter] = useState<string | "all">("all");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [procedureToDelete, setProcedureToDelete] = useState<Procedure | null>(null);
 
   const [isProcedureFormOpen, setIsProcedureFormOpen] = useState(false);
   const [editingProcedure, setEditingProcedure] = useState<Procedure | null>(null);
@@ -87,6 +119,20 @@ export default function ProceduresPage() {
     quantity_required: 1,
     notes: "",
   });
+
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const total = procedures.length;
+    const active = procedures.filter(p => p.is_active).length;
+    const inactive = total - active;
+    const totalCost = procedures.reduce((sum, p) => sum + p.cost, 0);
+    const avgDuration = procedures.length > 0
+      ? Math.round(procedures.reduce((sum, p) => sum + p.duration, 0) / procedures.length)
+      : 0;
+    const totalProducts = procedures.reduce((sum, p) => sum + (p.procedure_products?.length || 0), 0);
+
+    return { total, active, inactive, totalCost, avgDuration, totalProducts };
+  }, [procedures]);
 
   useEffect(() => {
     loadData();
@@ -172,18 +218,25 @@ export default function ProceduresPage() {
     setIsProcedureFormOpen(true);
   };
 
-  const handleDeleteProcedure = async (id: number) => {
-    if (window.confirm("Tem certeza que deseja desativar este procedimento?")) {
-      try {
-        await proceduresApi.deleteProcedure(id);
+  const handleDeleteProcedure = (procedure: Procedure) => {
+    setProcedureToDelete(procedure);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteProcedure = async () => {
+    if (!procedureToDelete) return;
+    
+    try {
+      await proceduresApi.deleteProcedure(procedureToDelete.id);
         toast.success("Procedimento desativado com sucesso!");
+      setDeleteDialogOpen(false);
+      setProcedureToDelete(null);
         loadData();
       } catch (err: any) {
         toast.error("Erro ao desativar procedimento", {
           description: err.message || "Ocorreu um erro desconhecido.",
         });
         console.error("Failed to delete procedure:", err);
-      }
     }
   };
 
@@ -240,182 +293,405 @@ export default function ProceduresPage() {
     }
   };
 
-  const filteredProcedures = procedures.filter((procedure) =>
-    procedure.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    procedure.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProcedures = useMemo(() => {
+    return procedures.filter((procedure) => {
+      const matchesSearch = procedure.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        procedure.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      if (activeFilter === "all") return matchesSearch;
+      if (activeFilter === "active") return matchesSearch && procedure.is_active;
+      if (activeFilter === "inactive") return matchesSearch && !procedure.is_active;
+      
+      return matchesSearch;
+    });
+  }, [procedures, searchTerm, activeFilter]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+          <Skeleton className="h-10 w-48" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-24" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-64 w-full" />
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Gestão de Procedimentos</h1>
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Stethoscope className="h-8 w-8 text-primary" />
+            Gestão de Procedimentos
+          </h1>
           <p className="text-muted-foreground">
-            Defina procedimentos médicos e suas fichas técnicas
+            Defina e gerencie procedimentos médicos e suas fichas técnicas
           </p>
         </div>
-        <Button onClick={() => setIsProcedureFormOpen(true)}>
-          <PlusCircle className="mr-2 h-4 w-4" /> Novo Procedimento
+        <Button onClick={() => setIsProcedureFormOpen(true)} size="lg" className="shrink-0">
+          <PlusCircle className="mr-2 h-5 w-5" /> Novo Procedimento
         </Button>
       </div>
 
+      {/* Statistics Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-l-4 border-l-blue-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total de Procedimentos
+            </CardTitle>
+            <Activity className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.active} ativos • {stats.inactive} inativos
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-blue-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Procedimentos Ativos
+            </CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.active}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.total > 0 ? Math.round((stats.active / stats.total) * 100) : 0}% do total
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-blue-600">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Duração Média
+            </CardTitle>
+            <Clock className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.avgDuration} min</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Tempo médio por procedimento
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-blue-500">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Valor Total
+            </CardTitle>
+            <DollarSign className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              R$ {stats.totalCost.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Soma de todos os custos
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Procedures List */}
       <Card>
         <CardHeader>
-          <CardTitle>Lista de Procedimentos</CardTitle>
-          <CardDescription>
-            Gerencie todos os procedimentos médicos da clínica.
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-xl">Lista de Procedimentos</CardTitle>
+              <CardDescription className="mt-1">
+                Gerencie todos os procedimentos médicos da clínica
           </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-sm">
+                {filteredProcedures.length} {filteredProcedures.length === 1 ? "procedimento" : "procedimentos"}
+              </Badge>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-4 mb-4">
+          {/* Search and Filters */}
+          <div className="flex flex-col gap-4 mb-6 sm:flex-row">
             <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar procedimentos por nome ou descrição..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
+                className="pl-9 h-10"
               />
             </div>
             <Select
               value={activeFilter}
               onValueChange={(value: string | "all") => setActiveFilter(value)}
             >
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px] h-10">
+                <Filter className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Filtrar por Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="active">Ativos</SelectItem>
-                <SelectItem value="inactive">Inativos</SelectItem>
+                <SelectItem value="all">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-4 w-4" />
+                    Todos
+                  </div>
+                </SelectItem>
+                <SelectItem value="active">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-blue-500" />
+                    Ativos
+                  </div>
+                </SelectItem>
+                <SelectItem value="inactive">
+                  <div className="flex items-center gap-2">
+                    <XCircle className="h-4 w-4 text-red-500" />
+                    Inativos
+                  </div>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
 
+          {/* Empty State */}
           {filteredProcedures.length === 0 ? (
-            <p>Nenhum procedimento encontrado.</p>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="rounded-full bg-muted p-4 mb-4">
+                <Stethoscope className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">
+                {searchTerm || activeFilter !== "all" 
+                  ? "Nenhum procedimento encontrado" 
+                  : "Nenhum procedimento cadastrado"}
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+                {searchTerm || activeFilter !== "all"
+                  ? "Tente ajustar os filtros de busca ou adicione um novo procedimento."
+                  : "Comece criando seu primeiro procedimento médico para gerenciar as fichas técnicas."}
+              </p>
+              {!searchTerm && activeFilter === "all" && (
+                <Button onClick={() => setIsProcedureFormOpen(true)}>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Criar Primeiro Procedimento
+                </Button>
+              )}
+            </div>
           ) : (
-            <div className="rounded-md border">
+            <div className="rounded-lg border overflow-hidden">
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Duração</TableHead>
-                    <TableHead>Custo</TableHead>
-                    <TableHead>Produtos</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Ações</TableHead>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold">Procedimento</TableHead>
+                      <TableHead className="font-semibold">Duração</TableHead>
+                      <TableHead className="font-semibold">Custo</TableHead>
+                      <TableHead className="font-semibold">Produtos</TableHead>
+                      <TableHead className="font-semibold">Status</TableHead>
+                      <TableHead className="font-semibold text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredProcedures.map((procedure) => (
-                    <TableRow key={procedure.id}>
-                      <TableCell className="font-medium">{procedure.name}</TableCell>
+                      <TableRow 
+                        key={procedure.id}
+                        className="hover:bg-muted/50 transition-colors"
+                      >
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="font-medium">{procedure.name}</div>
+                            {procedure.description && (
+                              <div className="text-sm text-muted-foreground line-clamp-1">
+                                {procedure.description}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-muted-foreground" />
-                          {procedure.duration} min
+                            <span className="font-medium">{procedure.duration} min</span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-2">
                           <DollarSign className="h-4 w-4 text-muted-foreground" />
-                          R$ {procedure.cost.toFixed(2)}
+                            <span className="font-medium">
+                              R$ {procedure.cost.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-2">
                           <Package className="h-4 w-4 text-muted-foreground" />
-                          {procedure.procedure_products?.length || 0} produtos
+                            <Badge variant="outline" className="font-normal">
+                              {procedure.procedure_products?.length || 0} {procedure.procedure_products?.length === 1 ? "produto" : "produtos"}
+                            </Badge>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={procedure.is_active ? "default" : "secondary"}>
-                          {procedure.is_active ? "Ativo" : "Inativo"}
+                          <Badge 
+                            variant={procedure.is_active ? "default" : "secondary"}
+                            className={cn(
+                              procedure.is_active 
+                                ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200" 
+                                : "bg-gray-100 text-gray-800 hover:bg-gray-100 border-gray-200"
+                            )}
+                          >
+                            {procedure.is_active ? (
+                              <>
+                                <CheckCircle2 className="mr-1 h-3 w-3" />
+                                Ativo
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="mr-1 h-3 w-3" />
+                                Inativo
+                              </>
+                            )}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenTechnicalSheet(procedure)}
-                            title="Ficha Técnica"
-                          >
-                            <Settings className="h-4 w-4" />
+                          <div className="flex items-center justify-end gap-1">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <MoreVertical className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditProcedure(procedure)}
-                            title="Editar Procedimento"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDeleteProcedure(procedure.id)}
-                            title="Desativar Procedimento"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleOpenTechnicalSheet(procedure)}>
+                                  <Settings className="mr-2 h-4 w-4" />
+                                  Ficha Técnica
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleEditProcedure(procedure)}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Editar
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  onClick={() => handleDeleteProcedure(procedure)}
+                                  className="text-red-600 focus:text-red-600"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Desativar
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
 
       {/* Procedure Form Dialog */}
-      <Dialog open={isProcedureFormOpen} onOpenChange={setIsProcedureFormOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+      <Dialog open={isProcedureFormOpen} onOpenChange={(open) => {
+        setIsProcedureFormOpen(open);
+        if (!open) {
+          setEditingProcedure(null);
+          setProcedureFormData({
+            name: "",
+            description: "",
+            duration: 30,
+            cost: 0,
+            is_active: true,
+          });
+        }
+      }}>
+        <DialogContent className="sm:max-w-[650px]">
           <DialogHeader>
-            <DialogTitle>{editingProcedure ? "Editar Procedimento" : "Novo Procedimento"}</DialogTitle>
+            <DialogTitle className="text-2xl flex items-center gap-2">
+              {editingProcedure ? (
+                <>
+                  <Edit className="h-5 w-5" />
+                  Editar Procedimento
+                </>
+              ) : (
+                <>
+                  <PlusCircle className="h-5 w-5" />
+                  Novo Procedimento
+                </>
+              )}
+            </DialogTitle>
             <DialogDescription>
-              Preencha os detalhes do procedimento médico.
+              {editingProcedure 
+                ? "Atualize os detalhes do procedimento médico."
+                : "Preencha os detalhes do procedimento médico."}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleProcedureFormSubmit} className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right">
-                Nome
+          <form onSubmit={handleProcedureFormSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-sm font-medium">
+                Nome do Procedimento <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="name"
                 value={procedureFormData.name}
                 onChange={handleProcedureInputChange}
-                className="col-span-3"
+                placeholder="Ex: Consulta médica, Exame de sangue..."
                 required
+                className="h-10"
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="description" className="text-right">
+
+            <div className="space-y-2">
+              <Label htmlFor="description" className="text-sm font-medium">
                 Descrição
               </Label>
               <Textarea
                 id="description"
                 value={procedureFormData.description}
                 onChange={handleProcedureInputChange}
-                className="col-span-3"
+                placeholder="Descreva o procedimento médico..."
+                rows={3}
+                className="resize-none"
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="duration" className="text-right">
-                Duração (min)
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="duration" className="text-sm font-medium">
+                  Duração (minutos) <span className="text-red-500">*</span>
               </Label>
+                <div className="relative">
+                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 id="duration"
                 type="number"
@@ -423,14 +699,18 @@ export default function ProceduresPage() {
                 max="480"
                 value={procedureFormData.duration}
                 onChange={handleProcedureInputChange}
-                className="col-span-3"
+                    className="pl-9 h-10"
                 required
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="cost" className="text-right">
-                Custo (R$)
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cost" className="text-sm font-medium">
+                  Custo (R$) <span className="text-red-500">*</span>
               </Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 id="cost"
                 type="number"
@@ -438,65 +718,133 @@ export default function ProceduresPage() {
                 min="0"
                 value={procedureFormData.cost}
                 onChange={handleProcedureInputChange}
-                className="col-span-3"
+                    placeholder="0.00"
+                    className="pl-9 h-10"
                 required
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="is_active" className="text-right">
-                Ativo
-              </Label>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 rounded-lg border p-4">
               <Checkbox
                 id="is_active"
                 checked={procedureFormData.is_active}
                 onCheckedChange={(checked) => setProcedureFormData(prev => ({ ...prev, is_active: checked as boolean }))}
-                className="col-span-3"
               />
+              <Label htmlFor="is_active" className="text-sm font-medium cursor-pointer flex-1">
+                Procedimento ativo
+              </Label>
+              {procedureFormData.is_active ? (
+                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+              ) : (
+                <XCircle className="h-5 w-5 text-gray-400" />
+              )}
             </div>
-            <DialogFooter>
-              <Button type="submit">
-                {editingProcedure ? "Atualizar Procedimento" : "Criar Procedimento"}
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsProcedureFormOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" className="min-w-[140px]">
+                {editingProcedure ? "Atualizar" : "Criar Procedimento"}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Desativar Procedimento
+            </AlertDialogTitle>
+            <AlertDialogDescription className="pt-2">
+              Tem certeza que deseja desativar o procedimento <strong>"{procedureToDelete?.name}"</strong>?
+              <br />
+              <br />
+              Esta ação não pode ser desfeita. O procedimento será marcado como inativo e não aparecerá nas listas de procedimentos ativos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteProcedure}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Desativar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Technical Sheet Dialog */}
       <Dialog open={isTechnicalSheetOpen} onOpenChange={setIsTechnicalSheetOpen}>
-        <DialogContent className="sm:max-w-[800px]">
+        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Ficha Técnica: {selectedProcedure?.name}</DialogTitle>
-            <DialogDescription>
-              Gerencie os produtos necessários para este procedimento.
+            <DialogTitle className="text-2xl flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Ficha Técnica: {selectedProcedure?.name}
+            </DialogTitle>
+            <DialogDescription className="pt-1">
+              Gerencie os produtos e materiais necessários para este procedimento médico.
             </DialogDescription>
           </DialogHeader>
           
+          <Separator />
+          
           {/* Add Product Form */}
-          <form onSubmit={handleAddProductToProcedure} className="grid gap-4 py-4 border-b">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="product_id" className="text-right">
-                Produto
+          <div className="space-y-4">
+            <Card className="bg-muted/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Adicionar Produto à Ficha Técnica
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleAddProductToProcedure} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="product_id" className="text-sm font-medium">
+                      Produto <span className="text-red-500">*</span>
               </Label>
               <Select
                 value={newProductForm.product_id.toString()}
                 onValueChange={(value) => setNewProductForm(prev => ({ ...prev, product_id: Number(value) }))}
               >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Selecione um produto" />
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Selecione um produto do estoque" />
                 </SelectTrigger>
                 <SelectContent>
-                  {products.map((product) => (
+                        {products.length === 0 ? (
+                          <div className="p-4 text-center text-sm text-muted-foreground">
+                            Nenhum produto disponível
+                          </div>
+                        ) : (
+                          products.map((product) => (
                     <SelectItem key={product.id} value={product.id.toString()}>
-                      {product.name} ({product.unit_of_measure})
+                              <div className="flex items-center gap-2">
+                                <Package className="h-4 w-4" />
+                                {product.name} <span className="text-muted-foreground">({product.unit_of_measure})</span>
+                              </div>
                     </SelectItem>
-                  ))}
+                          ))
+                        )}
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="quantity_required" className="text-right">
-                Quantidade
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="quantity_required" className="text-sm font-medium">
+                        Quantidade <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="quantity_required"
@@ -505,72 +853,125 @@ export default function ProceduresPage() {
                 min="0.01"
                 value={newProductForm.quantity_required}
                 onChange={(e) => setNewProductForm(prev => ({ ...prev, quantity_required: Number(e.target.value) }))}
-                className="col-span-3"
+                        className="h-10"
                 required
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="notes" className="text-right">
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="notes" className="text-sm font-medium">
                 Observações
               </Label>
               <Textarea
                 id="notes"
                 value={newProductForm.notes}
                 onChange={(e) => setNewProductForm(prev => ({ ...prev, notes: e.target.value }))}
-                className="col-span-3"
-                placeholder="Observações sobre o uso do produto..."
+                      placeholder="Observações sobre o uso do produto neste procedimento..."
+                      rows={2}
+                      className="resize-none"
               />
             </div>
-            <div className="flex justify-end">
-              <Button type="submit" disabled={!newProductForm.product_id}>
+
+                  <Button 
+                    type="submit" 
+                    disabled={!newProductForm.product_id || products.length === 0}
+                    className="w-full"
+                  >
                 <Plus className="mr-2 h-4 w-4" /> Adicionar Produto
               </Button>
-            </div>
           </form>
+              </CardContent>
+            </Card>
+
+            <Separator />
 
           {/* Products List */}
-          <div className="max-h-[400px] overflow-y-auto">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Package className="h-5 w-5" />
+                  Produtos na Ficha Técnica
+                </h3>
+                <Badge variant="outline" className="text-sm">
+                  {technicalSheetProducts.length} {technicalSheetProducts.length === 1 ? "produto" : "produtos"}
+                </Badge>
+              </div>
+
             {technicalSheetProducts.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                Nenhum produto adicionado à ficha técnica.
-              </p>
-            ) : (
+                <Card className="border-dashed">
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <div className="rounded-full bg-muted p-4 mb-4">
+                      <Package className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <h4 className="text-sm font-semibold mb-1">Nenhum produto adicionado</h4>
+                    <p className="text-xs text-muted-foreground text-center max-w-sm">
+                      Adicione produtos do estoque para criar a ficha técnica deste procedimento.
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="rounded-lg border overflow-hidden">
+                  <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto</TableHead>
-                    <TableHead>Quantidade</TableHead>
-                    <TableHead>Observações</TableHead>
-                    <TableHead>Ações</TableHead>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="font-semibold">Produto</TableHead>
+                          <TableHead className="font-semibold">Quantidade</TableHead>
+                          <TableHead className="font-semibold">Observações</TableHead>
+                          <TableHead className="font-semibold text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {technicalSheetProducts.map((pp) => (
-                    <TableRow key={pp.id}>
+                          <TableRow key={pp.id} className="hover:bg-muted/50 transition-colors">
                       <TableCell className="font-medium">
-                        {pp.product_name} ({pp.product_unit_of_measure})
+                              <div className="flex items-center gap-2">
+                                <Package className="h-4 w-4 text-muted-foreground" />
+                                <div>
+                                  <div>{pp.product_name}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {pp.product_unit_of_measure}
+                                  </div>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="font-medium">
+                                {pp.quantity_required}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm text-muted-foreground">
+                                {pp.notes || <span className="italic">Sem observações</span>}
+                              </span>
                       </TableCell>
-                      <TableCell>{pp.quantity_required}</TableCell>
-                      <TableCell>{pp.notes || "-"}</TableCell>
                       <TableCell>
+                              <div className="flex items-center justify-end">
                         <Button
-                          variant="destructive"
+                                  variant="ghost"
                           size="sm"
                           onClick={() => handleRemoveProductFromProcedure(pp.id)}
-                          title="Remover Produto"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
-                          <Minus className="h-4 w-4" />
+                                  <Trash2 className="h-4 w-4" />
                         </Button>
+                              </div>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+                  </div>
+                </div>
             )}
+            </div>
           </div>
           
           <DialogFooter>
-            <Button onClick={() => setIsTechnicalSheetOpen(false)}>Fechar</Button>
+            <Button variant="outline" onClick={() => setIsTechnicalSheetOpen(false)}>
+              Fechar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

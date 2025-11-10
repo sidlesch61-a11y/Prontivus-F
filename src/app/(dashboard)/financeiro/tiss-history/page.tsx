@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -23,10 +23,16 @@ import {
   User,
   Clock,
   CheckCircle,
-  XCircle
+  XCircle,
+  RefreshCw,
+  History,
+  TrendingUp,
+  AlertCircle,
+  Filter
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 interface TissHistoryEntry {
   id: number;
@@ -91,16 +97,20 @@ export default function TissHistoryPage() {
           
           try {
             // Try to get preview to check if XML can be generated
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/invoices/${invoiceId}/tiss-xml/preview`, {
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const token = localStorage.getItem('clinicore_access_token');
+            
+            const response = await fetch(`${API_URL}/api/invoices/${invoiceId}/tiss-xml/preview`, {
               method: 'GET',
               headers: {
-                'Authorization': `Bearer ${localStorage.getItem('clinicore_access_token')}`,
+                'Authorization': `Bearer ${token}`,
               },
             });
             
             if (response.ok) {
-              const xmlContent = await response.text();
-              fileSize = new Blob([xmlContent]).size;
+              const blob = await response.blob();
+              const xmlContent = await blob.text();
+              fileSize = blob.size;
               status = 'success';
             } else {
               status = 'error';
@@ -159,22 +169,22 @@ export default function TissHistoryPage() {
   const getStatusBadge = (status: string) => {
     if (status === 'success') {
       return (
-        <Badge variant="default" className="flex items-center gap-1">
-          <CheckCircle className="h-3 w-3" />
+        <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 hover:bg-green-200">
+          <CheckCircle className="h-3 w-3 mr-1" />
           Sucesso
         </Badge>
       );
     } else if (status === 'pending') {
       return (
-        <Badge variant="secondary" className="flex items-center gap-1">
-          <Clock className="h-3 w-3" />
+        <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200">
+          <Clock className="h-3 w-3 mr-1" />
           Pendente
         </Badge>
       );
     } else {
       return (
-        <Badge variant="destructive" className="flex items-center gap-1">
-          <XCircle className="h-3 w-3" />
+        <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 hover:bg-red-200">
+          <XCircle className="h-3 w-3 mr-1" />
           Erro
         </Badge>
       );
@@ -191,24 +201,57 @@ export default function TissHistoryPage() {
       setDownloadingIds(prev => new Set(prev).add(entry.invoiceId));
       
       // Download TISS XML from backend
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/invoices/${entry.invoiceId}/tiss-xml`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const token = localStorage.getItem('clinicore_access_token');
+      
+      const response = await fetch(`${API_URL}/api/invoices/${entry.invoiceId}/tiss-xml`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('clinicore_access_token')}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to download: ${response.statusText}`);
+        if (response.status === 401) {
+          // Redirect to login on 401
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
+          return;
+        }
+        
+        // Try to get error message from response
+        let errorMessage = `Falha ao baixar: ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          if (errorData.detail) {
+            errorMessage = typeof errorData.detail === 'string' 
+              ? errorData.detail 
+              : JSON.stringify(errorData.detail);
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch {
+          // If response is not JSON, use status text
+          if (response.status === 404) {
+            errorMessage = "Fatura não encontrada ou não foi possível gerar o XML TISS. Verifique se a fatura existe e possui todos os dados necessários.";
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const blob = await response.blob();
+      
+      // Create download link
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = entry.fileName;
+      document.body.appendChild(link);
       link.click();
       window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
       
       // Update download history
       const downloadHistory = JSON.parse(localStorage.getItem('tiss-download-history') || '{}');
@@ -253,14 +296,23 @@ export default function TissHistoryPage() {
 
     try {
       // Get preview XML from backend
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/invoices/${entry.invoiceId}/tiss-xml/preview`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const token = localStorage.getItem('clinicore_access_token');
+      
+      const response = await fetch(`${API_URL}/api/invoices/${entry.invoiceId}/tiss-xml/preview`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('clinicore_access_token')}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
+          return;
+        }
         throw new Error(`Failed to load: ${response.statusText}`);
       }
 
@@ -303,7 +355,8 @@ export default function TissHistoryPage() {
     }
   };
 
-  const filteredEntries = historyEntries.filter(entry => {
+  const filteredEntries = useMemo(() => {
+    return historyEntries.filter(entry => {
     const matchesSearch = !searchTerm || 
       entry.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       entry.invoiceId.toString().includes(searchTerm) ||
@@ -326,25 +379,41 @@ export default function TissHistoryPage() {
     
     return matchesSearch && matchesStatus && matchesDate;
   });
+  }, [historyEntries, searchTerm, statusFilter, dateFilter]);
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    const total = historyEntries.length;
+    const success = historyEntries.filter(e => e.status === 'success').length;
+    const errors = historyEntries.filter(e => e.status === 'error').length;
+    const downloads = historyEntries.reduce((sum, e) => sum + e.downloadCount, 0);
+    
+    return { total, success, errors, downloads };
+  }, [historyEntries]);
 
   if (isLoading || (loading && historyEntries.length === 0)) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center gap-2">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Carregando histórico TISS...</p>
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-50 to-blue-50/30">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+          <p className="text-muted-foreground font-medium">Carregando histórico TISS...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-gradient-to-br from-slate-50 to-blue-50/30 min-h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Histórico TISS XML</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg text-white shadow-lg">
+              <History className="h-5 w-5 sm:h-6 sm:w-6" />
+            </div>
+            Histórico TISS XML
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1.5">
             Acompanhe o histórico de geração e download de arquivos TISS XML
           </p>
         </div>
@@ -352,79 +421,100 @@ export default function TissHistoryPage() {
           variant="outline"
           onClick={loadHistory}
           disabled={loading}
+          className="bg-white"
+          size="sm"
         >
-          {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileCode className="h-4 w-4 mr-2" />}
-          Atualizar
+          {loading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
+          <span className="hidden sm:inline">Atualizar</span>
         </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Gerados</CardTitle>
-            <FileCode className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{historyEntries.length}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Sucessos</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {historyEntries.filter(e => e.status === 'success').length}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="border-l-4 border-l-indigo-500 shadow-sm bg-gradient-to-br from-indigo-50 to-white">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1">Total Gerados</p>
+                <p className="text-xl sm:text-2xl font-bold text-indigo-700">{stats.total}</p>
+              </div>
+              <div className="p-1.5 sm:p-2 bg-indigo-100 rounded-lg">
+                <FileCode className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-700" />
+              </div>
             </div>
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Erros</CardTitle>
-            <XCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {historyEntries.filter(e => e.status === 'error').length}
+        <Card className="border-l-4 border-l-green-500 shadow-sm bg-gradient-to-br from-green-50 to-white">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1">Sucessos</p>
+                <p className="text-xl sm:text-2xl font-bold text-green-700">{stats.success}</p>
+              </div>
+              <div className="p-1.5 sm:p-2 bg-green-100 rounded-lg">
+                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-700" />
+              </div>
             </div>
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Downloads</CardTitle>
-            <Download className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {historyEntries.reduce((sum, e) => sum + e.downloadCount, 0)}
+        <Card className="border-l-4 border-l-red-500 shadow-sm bg-gradient-to-br from-red-50 to-white">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1">Erros</p>
+                <p className="text-xl sm:text-2xl font-bold text-red-700">{stats.errors}</p>
+              </div>
+              <div className="p-1.5 sm:p-2 bg-red-100 rounded-lg">
+                <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-700" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="border-l-4 border-l-blue-500 shadow-sm bg-gradient-to-br from-blue-50 to-white">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1">Downloads</p>
+                <p className="text-xl sm:text-2xl font-bold text-blue-700">{stats.downloads}</p>
+              </div>
+              <div className="p-1.5 sm:p-2 bg-blue-100 rounded-lg">
+                <Download className="h-4 w-4 sm:h-5 sm:w-5 text-blue-700" />
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Filtros</CardTitle>
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+            <Filter className="h-4 w-4 sm:h-5 sm:w-5" />
+            Filtros
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
                 placeholder="Buscar por paciente, fatura ou arquivo..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
+                  className="pl-10 bg-white"
               />
+              </div>
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-full sm:w-48 bg-white">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -435,7 +525,7 @@ export default function TissHistoryPage() {
               </SelectContent>
             </Select>
             <Select value={dateFilter} onValueChange={setDateFilter}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-full sm:w-48 bg-white">
                 <SelectValue placeholder="Período" />
               </SelectTrigger>
               <SelectContent>
@@ -450,33 +540,49 @@ export default function TissHistoryPage() {
       </Card>
 
       {/* History Table */}
-      <Card>
+      <Card className="border-slate-200 shadow-sm">
         <CardHeader>
-          <CardTitle>Histórico de Geração ({filteredEntries.length})</CardTitle>
-          <CardDescription>
-            Lista de todos os arquivos TISS XML gerados
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base sm:text-lg">Histórico de Geração</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                {filteredEntries.length} {filteredEntries.length === 1 ? 'arquivo encontrado' : 'arquivos encontrados'}
           </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
+          {filteredEntries.length === 0 ? (
+            <div className="text-center py-8 sm:py-12 text-muted-foreground flex flex-col items-center justify-center gap-3">
+              <FileCode className="h-10 w-10 sm:h-12 sm:w-12 opacity-50" />
+              <p className="font-medium text-base sm:text-lg">Nenhum arquivo TISS XML encontrado</p>
+              {searchTerm || statusFilter !== "all" || dateFilter !== "all" ? (
+                <p className="text-sm">Tente ajustar os filtros de busca</p>
+              ) : (
+                <p className="text-sm">As faturas aparecerão aqui quando o TISS XML for gerado</p>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Fatura</TableHead>
-                <TableHead>Paciente</TableHead>
-                <TableHead>Arquivo</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Gerado em</TableHead>
-                <TableHead>Gerado por</TableHead>
-                <TableHead>Downloads</TableHead>
-                <TableHead>Ações</TableHead>
+                    <TableHead className="min-w-[80px]">Fatura</TableHead>
+                    <TableHead className="min-w-[150px]">Paciente</TableHead>
+                    <TableHead className="hidden md:table-cell min-w-[200px]">Arquivo</TableHead>
+                    <TableHead className="min-w-[100px]">Status</TableHead>
+                    <TableHead className="hidden lg:table-cell min-w-[150px]">Gerado em</TableHead>
+                    <TableHead className="hidden xl:table-cell min-w-[120px]">Gerado por</TableHead>
+                    <TableHead className="hidden lg:table-cell min-w-[100px]">Downloads</TableHead>
+                    <TableHead className="text-right min-w-[120px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredEntries.map((entry) => (
-                <TableRow key={entry.id}>
+                    <TableRow key={entry.id} className="hover:bg-slate-50 transition-colors">
                   <TableCell className="font-medium">#{entry.invoiceId}</TableCell>
-                  <TableCell>{entry.patientName}</TableCell>
-                  <TableCell>
+                      <TableCell className="truncate max-w-[150px]">{entry.patientName}</TableCell>
+                      <TableCell className="hidden md:table-cell">
                     <div>
                       <div className="font-mono text-sm">{entry.fileName}</div>
                       <div className="text-xs text-muted-foreground">
@@ -485,19 +591,19 @@ export default function TissHistoryPage() {
                     </div>
                   </TableCell>
                   <TableCell>{getStatusBadge(entry.status)}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
+                      <TableCell className="hidden lg:table-cell">
+                        <div className="flex items-center gap-1 text-sm">
+                          <Calendar className="h-3.5 w-3.5" />
                       {formatDate(entry.generatedAt)}
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <User className="h-3 w-3" />
+                      <TableCell className="hidden xl:table-cell">
+                        <div className="flex items-center gap-1 text-sm">
+                          <User className="h-3.5 w-3.5" />
                       {entry.generatedBy}
                     </div>
                   </TableCell>
-                  <TableCell>
+                      <TableCell className="hidden lg:table-cell">
                     <div className="text-center">
                       <div className="font-medium">{entry.downloadCount}</div>
                       {entry.lastDownloaded && (
@@ -508,15 +614,16 @@ export default function TissHistoryPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-end gap-1 sm:gap-2">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleView(entry)}
                         title="Visualizar XML"
                         disabled={entry.status === 'error' || entry.status === 'pending'}
+                            className="h-8 w-8 p-0"
                       >
-                        <Eye className="h-4 w-4" />
+                            <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </Button>
                       {entry.status === 'success' && (
                         <Button
@@ -525,11 +632,12 @@ export default function TissHistoryPage() {
                           onClick={() => handleDownload(entry)}
                           title="Baixar arquivo"
                           disabled={downloadingIds.has(entry.invoiceId)}
+                              className="h-8 w-8 p-0"
                         >
                           {downloadingIds.has(entry.invoiceId) ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                                <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
                           ) : (
-                            <Download className="h-4 w-4" />
+                                <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                           )}
                         </Button>
                       )}
@@ -539,8 +647,9 @@ export default function TissHistoryPage() {
                           size="sm"
                           onClick={() => router.push(`/financeiro/tiss-validator?invoice=${entry.invoiceId}`)}
                           title="Validar e corrigir"
+                              className="h-8 w-8 p-0"
                         >
-                          <FileCode className="h-4 w-4" />
+                              <FileCode className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </Button>
                       )}
                     </div>
@@ -549,23 +658,8 @@ export default function TissHistoryPage() {
               ))}
             </TableBody>
           </Table>
-          
-          {loading && historyEntries.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground flex items-center justify-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando histórico...
             </div>
-          ) : filteredEntries.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <FileCode className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Nenhum arquivo TISS XML encontrado</p>
-              {searchTerm || statusFilter !== "all" || dateFilter !== "all" ? (
-                <p className="text-sm mt-2">Tente ajustar os filtros de busca</p>
-              ) : (
-                <p className="text-sm mt-2">As faturas aparecerão aqui quando o TISS XML for gerado</p>
-              )}
-            </div>
-          ) : null}
+          )}
         </CardContent>
       </Card>
     </div>
