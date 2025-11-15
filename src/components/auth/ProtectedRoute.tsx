@@ -1,101 +1,254 @@
-/**
- * Protected Route Component
- * Wraps components that require specific permissions
- */
+"use client";
 
-import React from 'react';
-import { useRouter } from 'next/navigation';
-import { usePermissions } from '@/hooks/usePermissions';
-import { UserRole } from '@/hooks/usePermissions';
+import * as React from "react";
+import { useRequireAuth } from "@/contexts";
+import { useRouter, usePathname } from "next/navigation";
+import { AccessDenied } from "@/components/layout/AccessDenied";
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 
-interface ProtectedRouteProps {
+export interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: UserRole | UserRole[];
-  requiredModule?: string;
-  fallback?: React.ReactNode;
-  redirectTo?: string;
+  allowedRoles?: string[];
+  allowedRoleIds?: number[];
+  allowedRoleNames?: string[];
+  requiredPermissions?: string[];
+  fallbackRoute?: string;
+  showLoading?: boolean;
+  customAccessDenied?: React.ReactNode;
 }
 
+/**
+ * ProtectedRoute Component
+ * Wraps routes with role and permission verification
+ */
 export function ProtectedRoute({
   children,
-  requiredRole,
-  requiredModule,
-  fallback,
-  redirectTo = '/login'
+  allowedRoles = [],
+  allowedRoleIds = [],
+  allowedRoleNames = [],
+  requiredPermissions = [],
+  fallbackRoute = "/dashboard",
+  showLoading = true,
+  customAccessDenied,
 }: ProtectedRouteProps) {
-  const { canAccess, isStaff } = usePermissions();
+  const { user, isLoading } = useRequireAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const [isAuthorized, setIsAuthorized] = React.useState<boolean | null>(null);
+  const [checkingPermissions, setCheckingPermissions] = React.useState(true);
 
-  // If no specific requirements, just check if user is staff (not patient)
-  if (!requiredRole && !requiredModule) {
-    if (!isStaff()) {
-      if (fallback) return <>{fallback}</>;
-      router.push(redirectTo);
+  React.useEffect(() => {
+    const checkAccess = async () => {
+      if (isLoading) {
+        return;
+      }
+
+      if (!user) {
+        setIsAuthorized(false);
+        setCheckingPermissions(false);
+        return;
+      }
+
+      let authorized = false;
+
+      // Check role-based access
+      if (allowedRoles.length > 0 || allowedRoleIds.length > 0 || allowedRoleNames.length > 0) {
+        // Check by role enum
+        if (allowedRoles.length > 0) {
+          authorized = allowedRoles.includes(user.role);
+        }
+
+        // Check by role_id
+        if (!authorized && allowedRoleIds.length > 0 && user.role_id) {
+          authorized = allowedRoleIds.includes(user.role_id);
+        }
+
+        // Check by role_name
+        if (!authorized && allowedRoleNames.length > 0 && user.role_name) {
+          authorized = allowedRoleNames.includes(user.role_name);
+        }
+      } else {
+        // No role restrictions, allow authenticated users
+        authorized = true;
+      }
+
+      // Check permission-based access
+      if (authorized && requiredPermissions.length > 0) {
+        // Fetch user permissions from API or context
+        try {
+            // Try both token key formats for compatibility
+            const token = localStorage.getItem('prontivus_access_token') || 
+                          localStorage.getItem('clinicore_access_token');
+            
+            if (!token) {
+              authorized = false;
+              setCheckingPermissions(false);
+              return;
+            }
+
+            const response = await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/menu/user`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            );
+
+          if (response.ok) {
+            const menuData = await response.json();
+            // Extract permissions from menu structure
+            const userPermissions: string[] = [];
+            if (menuData.groups) {
+              menuData.groups.forEach((group: any) => {
+                if (group.items) {
+                  group.items.forEach((item: any) => {
+                    if (item.permissions_required) {
+                      userPermissions.push(...item.permissions_required);
+                    }
+                  });
+                }
+              });
+            }
+
+            // Check if user has all required permissions
+            const hasAllPermissions = requiredPermissions.every(permission =>
+              userPermissions.includes(permission)
+            );
+
+            if (!hasAllPermissions) {
+              authorized = false;
+            }
+          }
+        } catch (error) {
+          console.error('Error checking permissions:', error);
+          // On error, deny access for security
+          authorized = false;
+        }
+      }
+
+      setIsAuthorized(authorized);
+      setCheckingPermissions(false);
+
+      if (!authorized) {
+        toast.error("Acesso negado. Você não tem permissão para acessar esta área.");
+        router.push(fallbackRoute);
+      }
+    };
+
+    checkAccess();
+  }, [
+    user,
+    isLoading,
+    allowedRoles,
+    allowedRoleIds,
+    allowedRoleNames,
+    requiredPermissions,
+    fallbackRoute,
+    router,
+  ]);
+
+  // Show loading state
+  if (isLoading || checkingPermissions) {
+    if (!showLoading) {
       return null;
     }
-    return <>{children}</>;
+
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-cyan-50">
+        <div className="text-center space-y-4">
+          <Skeleton className="h-12 w-12 rounded-full mx-auto" />
+          <Skeleton className="h-4 w-48 mx-auto" />
+          <p className="text-sm text-gray-600">Verificando permissões...</p>
+        </div>
+      </div>
+    );
   }
 
-  // Check specific permissions
-  if (!canAccess(requiredRole || [], requiredModule)) {
-    if (fallback) return <>{fallback}</>;
-    router.push(redirectTo);
-    return null;
+  // Not authenticated
+  if (!user) {
+    return null; // Will redirect to login via useRequireAuth
   }
 
+  // Not authorized
+  if (isAuthorized === false) {
+    if (customAccessDenied) {
+      return <>{customAccessDenied}</>;
+    }
+
+    return (
+      <AccessDenied
+        title="Acesso Negado"
+        message="Você não tem permissão para acessar esta área."
+        fallbackRoute={fallbackRoute}
+        showBackButton={true}
+      />
+    );
+  }
+
+  // Authorized - render children
   return <>{children}</>;
 }
 
 /**
- * Admin Only Route Component
+ * Convenience components for specific roles
  */
-export function AdminOnlyRoute({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
+export function SuperAdminRoute({ children, ...props }: Omit<ProtectedRouteProps, 'allowedRoleIds' | 'allowedRoleNames'>) {
   return (
-    <ProtectedRoute requiredRole="admin" fallback={fallback}>
+    <ProtectedRoute
+      allowedRoleIds={[1]}
+      allowedRoleNames={['SuperAdmin']}
+      {...props}
+    >
       {children}
     </ProtectedRoute>
   );
 }
 
-/**
- * Staff Only Route Component (Admin, Secretary, Doctor)
- */
-export function StaffOnlyRoute({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
+export function AdminClinicaRoute({ children, ...props }: Omit<ProtectedRouteProps, 'allowedRoleIds' | 'allowedRoleNames'>) {
   return (
-    <ProtectedRoute requiredRole={["admin", "secretary", "doctor"]} fallback={fallback}>
+    <ProtectedRoute
+      allowedRoleIds={[2]}
+      allowedRoleNames={['AdminClinica']}
+      {...props}
+    >
       {children}
     </ProtectedRoute>
   );
 }
 
-/**
- * Doctor Only Route Component
- */
-export function DoctorOnlyRoute({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
+export function MedicoRoute({ children, ...props }: Omit<ProtectedRouteProps, 'allowedRoleIds' | 'allowedRoleNames'>) {
   return (
-    <ProtectedRoute requiredRole="doctor" fallback={fallback}>
+    <ProtectedRoute
+      allowedRoleIds={[3]}
+      allowedRoleNames={['Medico']}
+      {...props}
+    >
       {children}
     </ProtectedRoute>
   );
 }
 
-/**
- * Secretary Only Route Component
- */
-export function SecretaryOnlyRoute({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
+export function SecretariaRoute({ children, ...props }: Omit<ProtectedRouteProps, 'allowedRoleIds' | 'allowedRoleNames'>) {
   return (
-    <ProtectedRoute requiredRole="secretary" fallback={fallback}>
+    <ProtectedRoute
+      allowedRoleIds={[4]}
+      allowedRoleNames={['Secretaria']}
+      {...props}
+    >
       {children}
     </ProtectedRoute>
   );
 }
 
-/**
- * Patient Only Route Component
- */
-export function PatientOnlyRoute({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) {
+export function PacienteRoute({ children, ...props }: Omit<ProtectedRouteProps, 'allowedRoleIds' | 'allowedRoleNames'>) {
   return (
-    <ProtectedRoute requiredRole="patient" fallback={fallback}>
+    <ProtectedRoute
+      allowedRoleIds={[5]}
+      allowedRoleNames={['Paciente']}
+      {...props}
+    >
       {children}
     </ProtectedRoute>
   );

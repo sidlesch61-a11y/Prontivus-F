@@ -145,6 +145,18 @@ function RegisterPageContent() {
       // Use appropriate form data based on user type
       const formData = isEmployee ? employeeFormData : patientFormData;
       
+      // Get default clinic_id - try to get from API or use default
+      let clinicId = 1; // Default fallback
+      try {
+        const clinicsResponse = await api.get<Array<{ id: number }>>('/api/clinics');
+        if (clinicsResponse && Array.isArray(clinicsResponse) && clinicsResponse.length > 0) {
+          clinicId = clinicsResponse[0].id; // Use first available clinic
+        }
+      } catch (error) {
+        console.warn('Could not fetch clinics, using default clinic_id:', error);
+        // Use default clinic_id = 1
+      }
+
       const userData = {
         username: formData.email,
         email: formData.email,
@@ -152,7 +164,7 @@ function RegisterPageContent() {
         first_name: formData.first_name,
         last_name: formData.last_name,
         role: userRole,
-        clinic_id: 1, // TODO: Get clinic_id from context or default clinic
+        clinic_id: clinicId,
       };
 
       await register(userData);

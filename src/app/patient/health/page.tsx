@@ -13,7 +13,8 @@ import { api } from "@/lib/api";
 import { format, parseISO, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { Calendar, Clock, Activity, TestTube, Pill, User, Stethoscope, CheckCircle2, X, Download, ChevronRight } from "lucide-react";
+import { Calendar, Clock, Activity, TestTube, Pill, User, Stethoscope, CheckCircle2, X, Download, ChevronRight, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 type Appt = {
   id: number;
@@ -60,17 +61,38 @@ type HistoryItem = {
 export default function PatientHealthPage() {
   const [appointments, setAppointments] = useState<Appt[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [healthSummary, setHealthSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  // Helper function to reload all data
+  const reloadData = async () => {
+    try {
+      const [appts, hist, dashboard] = await Promise.all([
+        api.get<Appt[]>(`/api/appointments/patient-appointments`),
+        api.get<HistoryItem[]>(`/api/clinical/me/history`),
+        api.get<any>(`/api/patient/dashboard`).catch(() => null), // Optional, don't fail if unavailable
+      ]);
+      
+      setAppointments(appts);
+      setHistory(hist);
+      
+      // Extract health summary from dashboard if available
+      if (dashboard?.health_summary) {
+        setHealthSummary(dashboard.health_summary);
+      }
+    } catch (error: any) {
+      console.error("Error loading health data:", error);
+      toast.error("Erro ao carregar dados de saúde", {
+        description: error?.message || "Não foi possível carregar suas informações de saúde",
+      });
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [appts, hist] = await Promise.all([
-          api.get<Appt[]>(`/api/appointments/patient-appointments`),
-          api.get<HistoryItem[]>(`/api/clinical/me/history`),
-        ]);
-        setAppointments(appts);
-        setHistory(hist);
+        setLoading(true);
+        await reloadData();
       } finally {
         setLoading(false);
       }
@@ -81,7 +103,17 @@ export default function PatientHealthPage() {
   const nextAppointment = useMemo(() => {
     const now = new Date();
     return appointments
-      .filter(a => new Date(a.scheduled_datetime) >= now && a.status.toLowerCase() !== 'cancelled')
+      .filter(a => {
+        const aptDate = new Date(a.scheduled_datetime);
+        // Handle status - can be enum object or string
+        let statusValue = '';
+        if (typeof a.status === 'string') {
+          statusValue = a.status.toLowerCase();
+        } else if (a.status && typeof a.status === 'object' && 'value' in a.status) {
+          statusValue = String((a.status as any).value).toLowerCase();
+        }
+        return aptDate >= now && statusValue !== 'cancelled' && statusValue !== 'completed';
+      })
       .sort((a, b) => new Date(a.scheduled_datetime).getTime() - new Date(b.scheduled_datetime).getTime())[0] || null;
   }, [appointments]);
 
@@ -94,25 +126,66 @@ export default function PatientHealthPage() {
   }, [history]);
 
   const activeDiagnoses = useMemo(() => {
-    return history.flatMap(h => h.clinical_record?.diagnoses || []).filter(d => (d as any).type !== 'resolved');
+    // Get all diagnoses from history (model doesn't have is_active field, so we count all)
+    const allDiagnoses = history.flatMap(h => h.clinical_record?.diagnoses || []);
+    // Remove duplicates by ID
+    const uniqueDiagnoses = Array.from(
+      new Map(allDiagnoses.map(d => [d.id, d])).values()
+    );
+    return uniqueDiagnoses;
   }, [history]);
 
+  // Use health summary from dashboard if available, otherwise calculate from history
+  const activePrescriptionsCount = healthSummary?.active_prescriptions_count ?? activePrescriptions.length;
+  const pendingExamsCount = healthSummary?.pending_exams_count ?? pendingExams.length;
+  const activeConditionsCount = healthSummary?.active_conditions_count ?? activeDiagnoses.length;
+
   const cancelAppt = async (id: number) => {
-    await api.post(`/api/appointments/${id}/cancel`, {});
-    const appts = await api.get<Appt[]>(`/api/appointments/patient-appointments`);
-    setAppointments(appts);
+    try {
+      await api.post(`/api/appointments/${id}/cancel`, {});
+      await reloadData();
+      toast.success('Consulta cancelada com sucesso!');
+    } catch (error: any) {
+      console.error("Error cancelling appointment:", error);
+      toast.error('Erro ao cancelar consulta', {
+        description: error?.message || 'Não foi possível cancelar a consulta',
+      });
+    }
   };
 
   const rescheduleAppt = async (id: number, whenISO: string) => {
-    await api.post(`/api/appointments/${id}/reschedule`, { scheduled_datetime: whenISO });
-    const appts = await api.get<Appt[]>(`/api/appointments/patient-appointments`);
-    setAppointments(appts);
+    try {
+      await api.post(`/api/appointments/${id}/reschedule`, { scheduled_datetime: whenISO });
+      await reloadData();
+      toast.success('Consulta reagendada com sucesso!');
+    } catch (error: any) {
+      console.error("Error rescheduling appointment:", error);
+      toast.error('Erro ao reagendar consulta', {
+        description: error?.message || 'Não foi possível reagendar a consulta',
+      });
+    }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50/30">
+        <PatientHeader showSearch={false} notificationCount={3} />
+        <PatientMobileNav />
+        <div className="flex">
+          <div className="hidden lg:block">
+            <PatientSidebar />
+          </div>
+          <main className="flex-1 p-4 lg:p-6 pb-20 lg:pb-6 max-w-7xl mx-auto w-full">
+            <Card className="border-l-4 border-l-blue-500 bg-white/80 backdrop-blur-sm">
+              <CardContent className="py-12 text-center">
+                <div className="p-4 bg-blue-100 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                  <RefreshCw className="h-10 w-10 text-blue-600 animate-spin" />
+                </div>
+                <p className="text-gray-500 font-medium">Carregando informações de saúde...</p>
+              </CardContent>
+            </Card>
+          </main>
+        </div>
       </div>
     );
   }
@@ -169,7 +242,7 @@ export default function PatientHealthPage() {
                 <Pill className="h-4 w-4 text-teal-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{activePrescriptions.length}</div>
+                <div className="text-2xl font-bold">{activePrescriptionsCount}</div>
                 <p className="text-xs text-muted-foreground mt-1">Medicações em uso</p>
               </CardContent>
             </Card>
@@ -179,7 +252,7 @@ export default function PatientHealthPage() {
                 <TestTube className="h-4 w-4 text-orange-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{pendingExams.length}</div>
+                <div className="text-2xl font-bold">{pendingExamsCount}</div>
                 <p className="text-xs text-muted-foreground mt-1">Aguardando resultados</p>
               </CardContent>
             </Card>
@@ -189,7 +262,7 @@ export default function PatientHealthPage() {
                 <Activity className="h-4 w-4 text-green-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{activeDiagnoses.length}</div>
+                <div className="text-2xl font-bold">{activeConditionsCount}</div>
                 <p className="text-xs text-muted-foreground mt-1">Condições monitoradas</p>
               </CardContent>
             </Card>
@@ -244,6 +317,9 @@ export default function PatientHealthPage() {
                       variant="outline"
                       size="sm"
                       onClick={async () => {
+                        if (!confirm('Deseja reagendar esta consulta para daqui a 7 dias?')) {
+                          return;
+                        }
                         const newDate = addDays(parseISO(nextAppointment.scheduled_datetime), 7).toISOString();
                         await rescheduleAppt(nextAppointment.id, newDate);
                       }}
@@ -255,6 +331,9 @@ export default function PatientHealthPage() {
                       size="sm"
                       className="text-red-600 hover:text-red-700"
                       onClick={async () => {
+                        if (!confirm('Tem certeza que deseja cancelar esta consulta?')) {
+                          return;
+                        }
                         await cancelAppt(nextAppointment.id);
                       }}
                     >
@@ -306,9 +385,34 @@ export default function PatientHealthPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => {
-                              const url = `${process.env.NEXT_PUBLIC_API_URL || ''}/api/prescriptions/${p.id}/pdf`;
-                              window.open(url, '_blank');
+                            onClick={async () => {
+                              try {
+                                // Generate prescription text for download
+                                const prescriptionText = `
+PRESCRIÇÃO MÉDICA
+
+Medicamento: ${p.medication_name}
+Dosagem: ${p.dosage || 'Não especificado'}
+Frequência: ${p.frequency || 'Não especificado'}
+Duração: ${p.duration || 'Não especificado'}
+Instruções: ${p.instructions || 'Seguir orientações do médico'}
+
+Emitido em: ${format(parseISO(p.issued_date), "dd/MM/yyyy", { locale: ptBR })}
+                                `.trim();
+                                
+                                const blob = new Blob([prescriptionText], { type: 'text/plain' });
+                                const url = URL.createObjectURL(blob);
+                                const link = document.createElement('a');
+                                link.href = url;
+                                link.download = `prescricao_${p.medication_name.replace(/\s+/g, '_')}_${format(parseISO(p.issued_date), 'yyyy-MM-dd', { locale: ptBR })}.txt`;
+                                link.click();
+                                URL.revokeObjectURL(url);
+                                toast.success('Prescrição baixada com sucesso!');
+                              } catch (error: any) {
+                                toast.error('Erro ao baixar prescrição', {
+                                  description: error?.message || 'Não foi possível baixar a prescrição',
+                                });
+                              }
                             }}
                           >
                             <Download className="h-4 w-4 mr-2" />
@@ -349,12 +453,24 @@ export default function PatientHealthPage() {
               ) : (
                 <div className="space-y-2">
                   {pendingExams.map(er => (
-                    <div key={er.id} className="p-3 rounded-lg border border-orange-200 bg-orange-50/50 flex items-center justify-between hover:shadow-md transition-shadow">
+                    <div 
+                      key={er.id} 
+                      className="p-3 rounded-lg border border-orange-200 bg-orange-50/50 flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => {
+                        // Navigate to test results page
+                        window.location.href = '/patient/test-results';
+                      }}
+                    >
                       <div className="flex items-center gap-3">
                         <div className="p-2 rounded bg-orange-100"><TestTube className="h-4 w-4 text-orange-600" /></div>
                         <div>
                           <div className="font-medium text-gray-900">{er.exam_type}</div>
-                          <div className="text-xs text-gray-600">Solicitado em {format(parseISO(er.requested_date), "dd/MM/yyyy", { locale: ptBR })}</div>
+                          <div className="text-xs text-gray-600">
+                            {er.description ? `${er.description.substring(0, 50)}...` : 'Solicitado em ' + format(parseISO(er.requested_date), "dd/MM/yyyy", { locale: ptBR })}
+                          </div>
+                          {er.reason && (
+                            <div className="text-xs text-gray-500 mt-1">Motivo: {er.reason.substring(0, 60)}...</div>
+                          )}
                         </div>
                       </div>
                       <ChevronRight className="h-4 w-4 text-gray-400" />

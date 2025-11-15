@@ -53,6 +53,7 @@ import { PatientSidebar } from "@/components/patient/Navigation/PatientSidebar";
 import { PatientMobileNav } from "@/components/patient/Navigation/PatientMobileNav";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 // Types
 interface Medication {
@@ -163,34 +164,62 @@ const medicationTypeIcons: Record<string, React.ReactNode> = {
 export default function PrescriptionsPage() {
   const [activeMeds, setActiveMeds] = useState<Medication[]>([]);
   const [pastMeds, setPastMeds] = useState<Medication[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Helper function to map prescription data from API
+  const mapPrescription = (presc: any): Medication => {
+    // Determine medication type based on name or default to tablet
+    const nameLower = (presc.medication_name || '').toLowerCase();
+    let medType: 'tablet' | 'capsule' | 'syrup' | 'injection' | 'cream' = 'tablet';
+    if (nameLower.includes('cápsula') || nameLower.includes('capsula')) medType = 'capsule';
+    else if (nameLower.includes('xarope') || nameLower.includes('solução') || nameLower.includes('suspensão')) medType = 'syrup';
+    else if (nameLower.includes('injeção') || nameLower.includes('injecao') || nameLower.includes('ampola')) medType = 'injection';
+    else if (nameLower.includes('creme') || nameLower.includes('pomada') || nameLower.includes('gel')) medType = 'cream';
+
+    return {
+      id: String(presc.id),
+      name: presc.medication_name || 'Medicamento',
+      dosage: presc.dosage || 'Não especificado',
+      frequency: presc.frequency || 'Não especificado',
+      duration: presc.duration || 'Não especificado',
+      instructions: presc.instructions || 'Seguir orientações do médico',
+      issuedDate: presc.issued_date || presc.appointment_date || new Date().toISOString(),
+      prescriber: presc.doctor_name || 'Médico',
+      status: presc.is_active ? 'active' : 'completed',
+      refillsRemaining: 0, // Not available in current model
+      refillsTotal: 0, // Not available in current model
+      adherence: 85, // Default adherence (could be calculated from usage data if available)
+      type: medType,
+      takenToday: 0, // Would need separate tracking
+      scheduledToday: 3, // Default based on frequency
+      lastTaken: undefined,
+    };
+  };
 
   useEffect(() => {
     const load = async () => {
-      const history = await api.get<any[]>(`/api/clinical/me/history`);
-      const meds: Medication[] = [];
-      history.forEach(item => {
-        item.clinical_record?.prescriptions?.forEach((p: any) => {
-          meds.push({
-            id: String(p.id),
-            name: p.medication_name,
-            dosage: p.dosage || '',
-            frequency: p.frequency || '',
-            duration: p.duration || '',
-            instructions: p.instructions || '',
-            issuedDate: p.issued_date,
-            prescriber: item.doctor_name,
-            status: p.is_active ? 'active' : 'completed',
-            refillsRemaining: 0,
-            refillsTotal: 0,
-            adherence: 0,
-            type: 'tablet',
-            takenToday: 0,
-            scheduledToday: 0,
-          });
+      try {
+        setLoading(true);
+        
+        // Fetch all prescriptions (active and past)
+        const prescriptions = await api.get<any[]>(`/api/patient/prescriptions`);
+        
+        // Map prescriptions to Medication format
+        const meds: Medication[] = prescriptions.map(mapPrescription);
+        
+        // Separate active and past medications
+        setActiveMeds(meds.filter(m => m.status === 'active'));
+        setPastMeds(meds.filter(m => m.status !== 'active'));
+      } catch (error: any) {
+        console.error("Error loading prescriptions:", error);
+        toast.error("Erro ao carregar prescrições", {
+          description: error?.message || "Não foi possível carregar suas prescrições",
         });
-      });
-      setActiveMeds(meds.filter(m => m.status === 'active'));
-      setPastMeds(meds.filter(m => m.status !== 'active'));
+        setActiveMeds([]);
+        setPastMeds([]);
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, []);
@@ -221,14 +250,21 @@ export default function PrescriptionsPage() {
     );
   }, [searchQuery, pastMeds]);
 
-  // Pending refills
+  // Pending refills - check medications that might need refill soon
   const pendingRefills = useMemo(() => {
-    return mockActiveMedications.filter(med => {
-      if (!med.nextRefillDate) return false;
-      const refillDate = parseISO(med.nextRefillDate);
-      return isBefore(refillDate, addDays(new Date(), 7)) && med.refillsRemaining > 0;
+    return activeMeds.filter(med => {
+      // Check if medication was issued more than 20 days ago (approaching end of typical 30-day supply)
+      if (!med.issuedDate) return false;
+      try {
+        const issuedDate = parseISO(med.issuedDate);
+        const daysSinceIssued = differenceInDays(new Date(), issuedDate);
+        // If issued more than 20 days ago, might need refill
+        return daysSinceIssued >= 20;
+      } catch {
+        return false;
+      }
     });
-  }, []);
+  }, [activeMeds]);
 
   const toggleExpand = (id: string) => {
     const newExpanded = new Set(expandedMedications);
@@ -320,13 +356,48 @@ export default function PrescriptionsPage() {
                 Gerencie suas prescrições e acompanhe sua adesão medicamentosa
               </p>
             </div>
-            <Button variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50">
+            <Button 
+              variant="outline" 
+              className="border-blue-300 text-blue-700 hover:bg-blue-50"
+              onClick={async () => {
+                try {
+                  // Export prescriptions as JSON (could be enhanced to export as PDF/CSV)
+                  const prescriptions = await api.get<any[]>(`/api/patient/prescriptions`);
+                  const dataStr = JSON.stringify(prescriptions, null, 2);
+                  const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                  const url = URL.createObjectURL(dataBlob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `prescricoes_${format(new Date(), 'yyyy-MM-dd')}.json`;
+                  link.click();
+                  URL.revokeObjectURL(url);
+                  toast.success('Lista exportada com sucesso!');
+                } catch (error: any) {
+                  toast.error('Erro ao exportar lista', {
+                    description: error?.message || 'Não foi possível exportar as prescrições',
+                  });
+                }
+              }}
+            >
               <Download className="h-4 w-4 mr-2" />
               Exportar Lista
             </Button>
           </div>
 
+          {/* Loading State */}
+          {loading && (
+            <Card className="border-l-4 border-l-blue-500 bg-white/80 backdrop-blur-sm">
+              <CardContent className="py-12 text-center">
+                <div className="p-4 bg-blue-100 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                  <RefreshCw className="h-10 w-10 text-blue-600 animate-spin" />
+                </div>
+                <p className="text-gray-500 font-medium">Carregando prescrições...</p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Statistics Cards */}
+          {!loading && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -384,9 +455,10 @@ export default function PrescriptionsPage() {
               </CardContent>
             </Card>
           </div>
+          )}
 
           {/* Pending Refills Alert */}
-          {pendingRefills.length > 0 && (
+          {!loading && pendingRefills.length > 0 && (
             <Alert className="border-l-4 border-l-orange-500 bg-orange-50/50 mb-6">
               <Bell className="h-5 w-5 text-yellow-600" />
               <AlertTitle className="text-yellow-900 font-semibold">
@@ -413,6 +485,7 @@ export default function PrescriptionsPage() {
           )}
 
           {/* Search and Filters */}
+          {!loading && (
           <Card className="border-l-4 border-l-blue-500 mb-6 bg-white/80 backdrop-blur-sm">
             <CardHeader>
               <div className="flex flex-col md:flex-row gap-4">
@@ -432,8 +505,10 @@ export default function PrescriptionsPage() {
               </div>
             </CardHeader>
           </Card>
+          )}
 
           {/* Tabs */}
+          {!loading && (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="active">
@@ -699,9 +774,38 @@ export default function PrescriptionsPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => {
-                                const url = `${process.env.NEXT_PUBLIC_API_URL || ''}/api/prescriptions/${medication.id}/pdf`;
-                                window.open(url, '_blank');
+                              onClick={async () => {
+                                try {
+                                  // For now, we'll create a simple text-based prescription
+                                  // In production, this would generate a PDF from the backend
+                                  const prescriptionText = `
+PRESCRIÇÃO MÉDICA
+
+Medicamento: ${medication.name}
+Dosagem: ${medication.dosage}
+Frequência: ${medication.frequency}
+Duração: ${medication.duration}
+Instruções: ${medication.instructions}
+
+Prescrito por: ${medication.prescriber}
+Data: ${format(parseISO(medication.issuedDate), "dd/MM/yyyy", { locale: ptBR })}
+
+${medication.instructions || ''}
+                                  `.trim();
+                                  
+                                  const blob = new Blob([prescriptionText], { type: 'text/plain' });
+                                  const url = URL.createObjectURL(blob);
+                                  const link = document.createElement('a');
+                                  link.href = url;
+                                  link.download = `receita_${medication.name.replace(/\s+/g, '_')}_${format(parseISO(medication.issuedDate), 'yyyy-MM-dd', { locale: ptBR })}.txt`;
+                                  link.click();
+                                  URL.revokeObjectURL(url);
+                                  toast.success('Receita baixada com sucesso!');
+                                } catch (error: any) {
+                                  toast.error('Erro ao baixar receita', {
+                                    description: error?.message || 'Não foi possível baixar a receita',
+                                  });
+                                }
                               }}
                             >
                                 <Download className="h-4 w-4 mr-2" />
@@ -895,6 +999,7 @@ export default function PrescriptionsPage() {
               </div>
             </TabsContent>
           </Tabs>
+          )}
 
           {/* Pharmacy Dialog */}
           <Dialog open={showPharmacyDialog} onOpenChange={setShowPharmacyDialog}>

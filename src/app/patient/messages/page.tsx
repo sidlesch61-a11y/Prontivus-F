@@ -133,8 +133,12 @@ export default function MessagesPage() {
       if (data.length > 0 && !selectedThreadId) {
         setSelectedThreadId(data[0].id);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load threads:", error);
+      toast.error("Erro ao carregar conversas", {
+        description: error?.message || "Não foi possível carregar suas conversas",
+      });
+      setThreads([]);
     } finally {
       setLoading(false);
     }
@@ -146,12 +150,12 @@ export default function MessagesPage() {
       setCurrentThread(thread);
       
       // Map API messages to UI format
-      const mappedMessages: Message[] = thread.messages.map((msg) => ({
+      const mappedMessages: Message[] = (thread.messages || []).map((msg) => ({
         id: msg.id,
         senderId: msg.sender_id,
         senderName: msg.sender_type === "patient" ? "Você" : thread.provider_name,
         senderType: msg.sender_type,
-        content: msg.content,
+        content: msg.content || "",
         timestamp: parseISO(msg.created_at),
         read: msg.status === "read",
         urgent: thread.is_urgent,
@@ -161,7 +165,7 @@ export default function MessagesPage() {
           name: att.name,
           type: att.type === "pdf" ? "pdf" : att.type === "image" ? "image" : "document",
           url: att.url,
-          size: att.size,
+          size: att.size || 0,
         })),
         medicalContext: msg.medical_context ? {
           type: msg.medical_context.type as any,
@@ -173,8 +177,13 @@ export default function MessagesPage() {
       
       // Update thread in list
       setThreads(prev => prev.map(t => t.id === threadId ? thread : t));
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load thread:", error);
+      toast.error("Erro ao carregar conversa", {
+        description: error?.message || "Não foi possível carregar a conversa",
+      });
+      setCurrentThread(null);
+      setCurrentMessages([]);
     }
   };
 
@@ -183,7 +192,12 @@ export default function MessagesPage() {
   );
 
   const handleSendMessage = async () => {
-    if ((!messageInput.trim() && uploadedFiles.length === 0) || !selectedThreadId || sending) return;
+    if ((!messageInput.trim() && uploadedFiles.length === 0) || !selectedThreadId || sending) {
+      if (!messageInput.trim() && uploadedFiles.length === 0) {
+        toast.error("Por favor, digite uma mensagem ou anexe um arquivo");
+      }
+      return;
+    }
     
     try {
       setSending(true);
@@ -210,7 +224,7 @@ export default function MessagesPage() {
       }
       
       await messagesApi.sendMessage(selectedThreadId, {
-        content: messageInput.trim(),
+        content: messageInput.trim() || "", // Allow empty content if attachments exist
         attachments,
       });
       
@@ -225,7 +239,7 @@ export default function MessagesPage() {
     } catch (error: any) {
       console.error("Failed to send message:", error);
       toast.error("Erro ao enviar mensagem", {
-        description: error.message || "Não foi possível enviar a mensagem",
+        description: error?.message || error?.detail || "Não foi possível enviar a mensagem",
       });
     } finally {
       setSending(false);
@@ -303,9 +317,22 @@ export default function MessagesPage() {
             {/* Conversation List */}
             <div className="flex-1 overflow-y-auto">
               {loading ? (
-                <div className="p-4 text-center text-gray-500">Carregando...</div>
+                <div className="p-4 text-center">
+                  <RefreshCw className="h-5 w-5 text-gray-400 animate-spin mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Carregando conversas...</p>
+                </div>
               ) : filteredConversations.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">Nenhuma conversa encontrada</div>
+                <div className="p-4 text-center">
+                  <MessageCircle className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-500 mb-2">
+                    {searchQuery ? "Nenhuma conversa encontrada" : "Nenhuma conversa ainda"}
+                  </p>
+                  {!searchQuery && (
+                    <p className="text-xs text-gray-400">
+                      Suas conversas com os provedores aparecerão aqui
+                    </p>
+                  )}
+                </div>
               ) : (
                 filteredConversations.map((conversation) => (
                   <div
@@ -337,6 +364,11 @@ export default function MessagesPage() {
                               {formatMessageTime(parseISO(conversation.last_message_at))}
                             </span>
                           )}
+                          {!conversation.last_message_at && conversation.created_at && (
+                            <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
+                              {formatMessageTime(parseISO(conversation.created_at))}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mb-1">
                           {conversation.topic && (
@@ -353,7 +385,11 @@ export default function MessagesPage() {
                           )}
                         </div>
                         <p className="text-sm text-gray-600 truncate line-clamp-1">
-                          {conversation.last_message || "Nenhuma mensagem"}
+                          {conversation.last_message ? (
+                            conversation.last_message.length > 50 
+                              ? conversation.last_message.substring(0, 50) + "..." 
+                              : conversation.last_message
+                          ) : "Nenhuma mensagem"}
                         </p>
                         {conversation.unread_count > 0 && (
                           <div className="flex items-center justify-between mt-2">
@@ -417,7 +453,11 @@ export default function MessagesPage() {
                 {/* Messages Area */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
                   {currentMessages.length === 0 ? (
-                    <div className="text-center text-gray-500 py-8">Nenhuma mensagem ainda</div>
+                    <div className="text-center py-12">
+                      <MessageCircle className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500 font-medium mb-2">Nenhuma mensagem ainda</p>
+                      <p className="text-sm text-gray-400">Envie uma mensagem para começar a conversa</p>
+                    </div>
                   ) : (
                     currentMessages.map((message, index) => {
                       const isPatient = message.senderType === "patient";
@@ -780,7 +820,14 @@ export default function MessagesPage() {
                       className="bg-blue-600 hover:bg-blue-700 flex-shrink-0"
                       disabled={(!messageInput.trim() && uploadedFiles.length === 0) || sending}
                     >
-                      <Send className="h-4 w-4" />
+                      {sending ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                          Enviando...
+                        </>
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                 </div>

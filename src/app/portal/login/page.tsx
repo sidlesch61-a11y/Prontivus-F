@@ -62,7 +62,7 @@ function LoginPageContent() {
       toast.success("Login realizado com sucesso!");
       
       // Get user from localStorage (login updates it via setAuthData)
-      // Use a small delay to ensure localStorage is updated
+      // Use a small delay to ensure localStorage is updated and auth context is ready
       setTimeout(() => {
         const currentUser = getStoredUser();
         const userRole = currentUser?.role;
@@ -79,7 +79,7 @@ function LoginPageContent() {
             router.push(redirectTo);
           }
         }
-      }, 100);
+      }, 200); // Increased delay to ensure auth context is ready
     } catch (err: any) {
       console.error("Login error:", err);
       // Extract error message from various error formats

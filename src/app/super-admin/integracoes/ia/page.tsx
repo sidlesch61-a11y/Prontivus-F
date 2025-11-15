@@ -1,0 +1,599 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Sparkles, Settings, Brain, Zap, BarChart3, RefreshCw, Save, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
+
+interface AIConfig {
+  enabled: boolean;
+  provider: string;
+  api_key: string;
+  model: string;
+  base_url: string;
+  max_tokens: number;
+  temperature: number;
+  features: {
+    clinical_analysis: {
+      enabled: boolean;
+      description: string;
+    };
+    diagnosis_suggestions: {
+      enabled: boolean;
+      description: string;
+    };
+    predictive_analysis: {
+      enabled: boolean;
+      description: string;
+    };
+    virtual_assistant: {
+      enabled: boolean;
+      description: string;
+    };
+  };
+  usage_stats: {
+    documents_processed: number;
+    suggestions_generated: number;
+    approval_rate: number;
+  };
+}
+
+interface AIStats {
+  documents_processed: number;
+  suggestions_generated: number;
+  approval_rate: number;
+  total_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+  average_response_time_ms: number;
+}
+
+const AI_PROVIDERS = [
+  { value: "openai", label: "OpenAI" },
+  { value: "google", label: "Google (Gemini)" },
+  { value: "anthropic", label: "Anthropic (Claude)" },
+  { value: "azure", label: "Azure OpenAI" },
+];
+
+const AI_MODELS: Record<string, string[]> = {
+  openai: ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
+  google: ["gemini-pro", "gemini-pro-vision"],
+  anthropic: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"],
+  azure: ["gpt-4", "gpt-35-turbo"],
+};
+
+export default function IAPage() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [config, setConfig] = useState<AIConfig | null>(null);
+  const [stats, setStats] = useState<AIStats | null>(null);
+  const [formData, setFormData] = useState<AIConfig>({
+    enabled: false,
+    provider: "openai",
+    api_key: "",
+    model: "gpt-4",
+    base_url: "",
+    max_tokens: 2000,
+    temperature: 0.7,
+    features: {
+      clinical_analysis: {
+        enabled: false,
+        description: "Análise automática de prontuários médicos",
+      },
+      diagnosis_suggestions: {
+        enabled: false,
+        description: "Sugestões baseadas em sintomas e histórico",
+      },
+      predictive_analysis: {
+        enabled: false,
+        description: "Previsões baseadas em dados históricos",
+      },
+      virtual_assistant: {
+        enabled: false,
+        description: "Assistente inteligente para médicos",
+      },
+    },
+    usage_stats: {
+      documents_processed: 0,
+      suggestions_generated: 0,
+      approval_rate: 0.0,
+    },
+  });
+  const [connectionStatus, setConnectionStatus] = useState<"unknown" | "success" | "error">("unknown");
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      await Promise.all([
+        loadConfig(),
+        loadStats(),
+      ]);
+    } catch (error: any) {
+      console.error("Failed to load data:", error);
+      toast.error("Erro ao carregar dados", {
+        description: error?.message || error?.detail || "Não foi possível carregar os dados",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadConfig = async () => {
+    try {
+      const data = await api.get<AIConfig>("/api/v1/ai-config");
+      setConfig(data);
+      setFormData(data);
+    } catch (error: any) {
+      console.error("Failed to load AI config:", error);
+      toast.error("Erro ao carregar configuração de IA", {
+        description: error?.message || error?.detail || "Não foi possível carregar a configuração",
+      });
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const data = await api.get<AIStats>("/api/v1/ai-config/stats");
+      setStats(data);
+      
+      // Update formData with stats
+      if (config) {
+        setFormData(prev => ({
+          ...prev,
+          usage_stats: {
+            documents_processed: data.documents_processed,
+            suggestions_generated: data.suggestions_generated,
+            approval_rate: data.approval_rate,
+          },
+        }));
+      }
+    } catch (error: any) {
+      console.error("Failed to load AI stats:", error);
+      // Don't show error for stats, it's optional
+      setStats(null);
+    }
+  };
+
+  const saveConfig = async () => {
+    try {
+      setSaving(true);
+      await api.put("/api/v1/ai-config", formData);
+      setConfig(formData);
+      toast.success("Configuração de IA salva com sucesso!");
+    } catch (error: any) {
+      console.error("Failed to save AI config:", error);
+      toast.error("Erro ao salvar configuração de IA", {
+        description: error?.message || error?.detail || "Não foi possível salvar a configuração",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const testConnection = async () => {
+    if (!formData.api_key) {
+      toast.error("Chave da API é obrigatória para testar a conexão");
+      return;
+    }
+
+    try {
+      setTesting(true);
+      setConnectionStatus("unknown");
+      
+      const result = await api.post<{ success: boolean; message: string; provider: string; model: string; response_time_ms: number }>("/api/v1/ai-config/test-connection");
+      
+      if (result.success) {
+        setConnectionStatus("success");
+        toast.success("Conexão testada com sucesso!", {
+          description: `Resposta em ${result.response_time_ms}ms`,
+        });
+      } else {
+        setConnectionStatus("error");
+        toast.error("Falha ao testar conexão", {
+          description: result.message || "Não foi possível conectar ao provedor de IA",
+        });
+      }
+    } catch (error: any) {
+      console.error("Failed to test connection:", error);
+      setConnectionStatus("error");
+      toast.error("Erro ao testar conexão", {
+        description: error?.message || error?.detail || "Não foi possível testar a conexão",
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const toggleFeature = (featureKey: keyof typeof formData.features) => {
+    setFormData(prev => ({
+      ...prev,
+      features: {
+        ...prev.features,
+        [featureKey]: {
+          ...prev.features[featureKey],
+          enabled: !prev.features[featureKey].enabled,
+        },
+      },
+    }));
+  };
+
+  const getStatusBadge = () => {
+    if (!formData.enabled) {
+      return <Badge className="bg-gray-100 text-gray-800">Desativado</Badge>;
+    }
+    if (connectionStatus === "success") {
+      return <Badge className="bg-green-100 text-green-800"><CheckCircle2 className="h-3 w-3 mr-1 inline" />Ativo</Badge>;
+    }
+    if (connectionStatus === "error") {
+      return <Badge className="bg-red-100 text-red-800"><XCircle className="h-3 w-3 mr-1 inline" />Erro</Badge>;
+    }
+    return <Badge className="bg-yellow-100 text-yellow-800"><AlertCircle className="h-3 w-3 mr-1 inline" />Não Testado</Badge>;
+  };
+
+  const getAvailableModels = () => {
+    return AI_MODELS[formData.provider] || AI_MODELS.openai;
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <Sparkles className="h-8 w-8 text-purple-600" />
+            Integração de Inteligência Artificial
+          </h1>
+          <p className="text-gray-600 mt-2">
+            Configure e gerencie recursos de IA do sistema
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={loadData}
+          disabled={loading}
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </Button>
+      </div>
+
+      {/* Stats Cards */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+                <Brain className="h-4 w-4" />
+                Processamento de Texto
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-purple-600">
+                {stats.documents_processed.toLocaleString()}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Documentos processados</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+                <Zap className="h-4 w-4" />
+                Sugestões Geradas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-blue-600">
+                {stats.suggestions_generated.toLocaleString()}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Total de sugestões</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" />
+                Taxa de Aprovação
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-green-600">
+                {(stats.approval_rate * 100).toFixed(0)}%
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Sugestões aceitas</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* AI Configuration Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Configurações de IA</CardTitle>
+          <CardDescription>
+            Gerencie as configurações de inteligência artificial
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="ai-enabled">Habilitar IA</Label>
+              <p className="text-sm text-gray-500 mt-1">
+                Ativa recursos de inteligência artificial no sistema
+              </p>
+            </div>
+            <Switch
+              id="ai-enabled"
+              checked={formData.enabled}
+              onCheckedChange={(checked) =>
+                setFormData(prev => ({ ...prev, enabled: checked }))
+              }
+            />
+          </div>
+
+          {formData.enabled && (
+            <>
+              <div className="space-y-4 pt-4 border-t">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="ai-provider">Provedor de IA</Label>
+                    <Select
+                      value={formData.provider}
+                      onValueChange={(value) => {
+                        setFormData(prev => ({
+                          ...prev,
+                          provider: value,
+                          model: AI_MODELS[value]?.[0] || "gpt-4",
+                        }));
+                      }}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Selecione o provedor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {AI_PROVIDERS.map((provider) => (
+                          <SelectItem key={provider.value} value={provider.value}>
+                            {provider.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="ai-model">Modelo</Label>
+                    <Select
+                      value={formData.model}
+                      onValueChange={(value) =>
+                        setFormData(prev => ({ ...prev, model: value }))
+                      }
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Selecione o modelo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getAvailableModels().map((model) => (
+                          <SelectItem key={model} value={model}>
+                            {model}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="ai-api-key">Chave da API</Label>
+                  <Input
+                    id="ai-api-key"
+                    type="password"
+                    placeholder="••••••••"
+                    className="mt-1"
+                    value={formData.api_key}
+                    onChange={(e) =>
+                      setFormData(prev => ({ ...prev, api_key: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="ai-base-url">URL Base (Opcional)</Label>
+                  <Input
+                    id="ai-base-url"
+                    placeholder="https://api.openai.com/v1"
+                    className="mt-1"
+                    value={formData.base_url}
+                    onChange={(e) =>
+                      setFormData(prev => ({ ...prev, base_url: e.target.value }))
+                    }
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Deixe em branco para usar a URL padrão do provedor
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="ai-max-tokens">Máximo de Tokens</Label>
+                    <Input
+                      id="ai-max-tokens"
+                      type="number"
+                      min="1"
+                      max="8000"
+                      className="mt-1"
+                      value={formData.max_tokens}
+                      onChange={(e) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          max_tokens: parseInt(e.target.value) || 2000,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="ai-temperature">Temperatura (0-1)</Label>
+                    <Input
+                      id="ai-temperature"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="1"
+                      className="mt-1"
+                      value={formData.temperature}
+                      onChange={(e) =>
+                        setFormData(prev => ({
+                          ...prev,
+                          temperature: parseFloat(e.target.value) || 0.7,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <Button
+                  className="w-full bg-purple-600 hover:bg-purple-700 mb-3"
+                  onClick={testConnection}
+                  disabled={testing || !formData.api_key}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${testing ? 'animate-spin' : ''}`} />
+                  {testing ? "Testando..." : "Testar Conexão"}
+                </Button>
+                <Button
+                  className="w-full bg-purple-600 hover:bg-purple-700"
+                  onClick={saveConfig}
+                  disabled={saving}
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {saving ? "Salvando..." : "Salvar Configurações"}
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* AI Features */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recursos de IA Disponíveis</CardTitle>
+          <CardDescription>
+            Funcionalidades de inteligência artificial ativas
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Object.entries(formData.features).map(([key, feature]) => (
+              <div
+                key={key}
+                className={`p-4 border rounded-lg ${
+                  feature.enabled ? "border-purple-200 bg-purple-50/30" : ""
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  {key === "clinical_analysis" && (
+                    <Brain className="h-5 w-5 text-purple-600" />
+                  )}
+                  {key === "diagnosis_suggestions" && (
+                    <Zap className="h-5 w-5 text-purple-600" />
+                  )}
+                  {key === "predictive_analysis" && (
+                    <BarChart3 className="h-5 w-5 text-purple-600" />
+                  )}
+                  {key === "virtual_assistant" && (
+                    <Sparkles className="h-5 w-5 text-purple-600" />
+                  )}
+                  <h3 className="font-semibold flex-1">
+                    {key === "clinical_analysis" && "Análise de Prontuários"}
+                    {key === "diagnosis_suggestions" && "Sugestões de Diagnóstico"}
+                    {key === "predictive_analysis" && "Análise Preditiva"}
+                    {key === "virtual_assistant" && "Assistente Virtual"}
+                  </h3>
+                  <Badge
+                    className={
+                      feature.enabled
+                        ? "bg-green-100 text-green-800"
+                        : "bg-gray-100 text-gray-800"
+                    }
+                  >
+                    {feature.enabled ? "Ativo" : "Inativo"}
+                  </Badge>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">{feature.description}</p>
+                <Switch
+                  checked={feature.enabled}
+                  onCheckedChange={() => toggleFeature(key as keyof typeof formData.features)}
+                  disabled={!formData.enabled}
+                />
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Additional Stats */}
+      {stats && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Estatísticas Detalhadas</CardTitle>
+            <CardDescription>
+              Métricas de uso da IA
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {stats.total_requests.toLocaleString()}
+                </div>
+                <div className="text-sm text-gray-600">Total de Requisições</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-green-600">
+                  {stats.successful_requests.toLocaleString()}
+                </div>
+                <div className="text-sm text-gray-600">Requisições Bem-sucedidas</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-red-600">
+                  {stats.failed_requests.toLocaleString()}
+                </div>
+                <div className="text-sm text-gray-600">Requisições Falhadas</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-blue-600">
+                  {stats.average_response_time_ms}ms
+                </div>
+                <div className="text-sm text-gray-600">Tempo Médio de Resposta</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}

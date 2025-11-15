@@ -294,7 +294,7 @@ export default function AdminSettingsPage() {
               </>
             ) : (
               <>
-                <Save className="h-4 w-4 mr-2" />
+            <Save className="h-4 w-4 mr-2" />
                 Salvar Alterações
               </>
             )}
@@ -387,7 +387,7 @@ export default function AdminSettingsPage() {
         {/* General Settings Tab */}
         <TabsContent value="general" className="space-y-6">
           <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
-            <CardHeader>
+        <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-blue-600">
@@ -405,7 +405,7 @@ export default function AdminSettingsPage() {
                   Geral
                 </Badge>
               </div>
-            </CardHeader>
+        </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
@@ -413,41 +413,41 @@ export default function AdminSettingsPage() {
                     <Building2 className="h-4 w-4 text-blue-600" />
                     Nome da Clínica
                   </Label>
-                  <Input
-                    id="clinicName"
-                    value={settings.clinicName}
-                    onChange={(e) => handleSettingChange("clinicName", e.target.value)}
+              <Input
+                id="clinicName"
+                value={settings.clinicName}
+                onChange={(e) => handleSettingChange("clinicName", e.target.value)}
                     placeholder="Digite o nome da clínica"
                     className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
+              />
+            </div>
                 <div className="space-y-2">
                   <Label htmlFor="clinicEmail" className="flex items-center gap-2">
                     <Mail className="h-4 w-4 text-blue-600" />
                     E-mail
                   </Label>
-                  <Input
-                    id="clinicEmail"
-                    type="email"
-                    value={settings.clinicEmail}
-                    onChange={(e) => handleSettingChange("clinicEmail", e.target.value)}
+              <Input
+                id="clinicEmail"
+                type="email"
+                value={settings.clinicEmail}
+                onChange={(e) => handleSettingChange("clinicEmail", e.target.value)}
                     placeholder="contato@clinica.com"
                     className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
+              />
+            </div>
                 <div className="space-y-2">
                   <Label htmlFor="clinicPhone" className="flex items-center gap-2">
                     <Phone className="h-4 w-4 text-blue-600" />
                     Telefone
                   </Label>
-                  <Input
-                    id="clinicPhone"
-                    value={settings.clinicPhone}
-                    onChange={(e) => handleSettingChange("clinicPhone", e.target.value)}
+              <Input
+                id="clinicPhone"
+                value={settings.clinicPhone}
+                onChange={(e) => handleSettingChange("clinicPhone", e.target.value)}
                     placeholder="(11) 99999-9999"
                     className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
+              />
+            </div>
                 <div className="space-y-2">
                   <Label htmlFor="maxUsers" className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-blue-600" />
@@ -466,88 +466,88 @@ export default function AdminSettingsPage() {
                     Número máximo de usuários permitidos no sistema
                   </p>
                 </div>
-              </div>
+          </div>
               <div className="space-y-2">
                 <Label htmlFor="clinicAddress" className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-blue-600" />
                   Endereço
                 </Label>
-                <Textarea
-                  id="clinicAddress"
-                  value={settings.clinicAddress}
-                  onChange={(e) => handleSettingChange("clinicAddress", e.target.value)}
+            <Textarea
+              id="clinicAddress"
+              value={settings.clinicAddress}
+              onChange={(e) => handleSettingChange("clinicAddress", e.target.value)}
                   placeholder="Digite o endereço completo da clínica"
-                  rows={3}
+              rows={3}
                   className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-            </CardContent>
-          </Card>
+            />
+          </div>
+        </CardContent>
+      </Card>
         </TabsContent>
 
         {/* License and Modules Tab */}
         <TabsContent value="license" className="space-y-6">
-          {/* License Settings */}
+      {/* License Settings */}
           <Card className="border-l-4 border-l-blue-700 hover:shadow-lg transition-shadow">
-            <CardHeader>
+        <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-blue-700">
                     <div className="p-2 bg-blue-100 rounded-lg">
-                      <Lock className="h-5 w-5" />
+            <Lock className="h-5 w-5" />
                     </div>
                     Configurações de Licença
-                  </CardTitle>
+          </CardTitle>
                   <CardDescription className="mt-2">
                     Gerencie informações de licenciamento do sistema
-                  </CardDescription>
+          </CardDescription>
                 </div>
                 <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
                   <Shield className="h-3 w-3 mr-1" />
                   Licença
                 </Badge>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
+        </CardHeader>
+        <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="licenseKey" className="flex items-center gap-2">
                     <Key className="h-4 w-4 text-blue-600" />
                     Chave de Licença
                   </Label>
-                  <Input
-                    id="licenseKey"
-                    value={settings.licenseKey}
-                    onChange={(e) => handleSettingChange("licenseKey", e.target.value)}
+              <Input
+                id="licenseKey"
+                value={settings.licenseKey}
+                onChange={(e) => handleSettingChange("licenseKey", e.target.value)}
                     placeholder="Digite a chave de licença"
                     className="border-blue-200 focus:border-blue-500 focus:ring-blue-500 font-mono"
-                  />
+              />
                   <p className="text-xs text-muted-foreground">
                     Chave única de licenciamento do sistema
                   </p>
-                </div>
+            </div>
                 <div className="space-y-2">
                   <Label htmlFor="maxUsersLicense" className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-blue-600" />
                     Limite de Usuários (Licença)
                   </Label>
-                  <Input
+              <Input
                     id="maxUsersLicense"
-                    type="number"
-                    value={settings.maxUsers}
+                type="number"
+                value={settings.maxUsers}
                     onChange={(e) => handleSettingChange("maxUsers", parseInt(e.target.value) || 1)}
-                    min="1"
-                    max="1000"
+                min="1"
+                max="1000"
                     className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
                     disabled
                   />
                   <p className="text-xs text-muted-foreground">
                     Definido pela licença
                   </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
           {/* Active Modules */}
           <Card className="border-l-4 border-l-blue-600 hover:shadow-lg transition-shadow">

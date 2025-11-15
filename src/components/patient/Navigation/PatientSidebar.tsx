@@ -12,7 +12,6 @@ import { usePatientBadges } from "@/hooks/usePatientBadges";
 import {
   Home,
   CalendarDays,
-  FolderOpen,
   Pill,
   FlaskConical,
   MessageCircle,
@@ -20,7 +19,6 @@ import {
   Settings2,
   FileText,
   HeartPulse,
-  Stethoscope,
   LogOut,
 } from "lucide-react";
 
@@ -38,18 +36,17 @@ interface PatientSidebarProps {
 }
 
 // Base navigation items without badges (badges will be added dynamically)
+// Simplified menu structure matching the requirements
 const baseNavigationItems: NavigationItem[] = [
   { label: "Início", icon: Home, href: "/patient/dashboard", section: "main" },
   { label: "Agendamentos", icon: CalendarDays, href: "/patient/appointments", section: "main" },
-  { label: "Prontuário Médico", icon: FolderOpen, href: "/patient/medical-records", section: "main" },
-  { label: "Prescrições", icon: Pill, href: "/patient/prescriptions", section: "health" },
-  { label: "Resultados de Exames", icon: FlaskConical, href: "/patient/test-results", section: "health" },
+  { label: "Histórico de Medicações", icon: Pill, href: "/patient/prescriptions", section: "health" },
+  { label: "Resultados Exames", icon: FlaskConical, href: "/patient/test-results", section: "health" },
   { label: "Resumo de Saúde", icon: HeartPulse, href: "/patient/health", section: "health" },
+  { label: "Notas da Clínica", icon: FileText, href: "/patient/notes", section: "health" },
   { label: "Mensagens", icon: MessageCircle, href: "/patient/messages", section: "communication" },
-  { label: "Anotações Clínicas", icon: FileText, href: "/patient/notes", section: "health" },
-  { label: "Faturamento e Pagamentos", icon: Wallet, href: "/patient/billing", section: "services" },
-  { label: "Meus Médicos", icon: Stethoscope, href: "/patient/doctors", section: "services" },
-  { label: "Configurações", icon: Settings2, href: "/patient/settings", section: "settings" },
+  { label: "Pagamentos", icon: Wallet, href: "/patient/billing", section: "services" },
+  { label: "Perfil", icon: Settings2, href: "/patient/profile", section: "settings" },
 ];
 
 const sectionColors = {

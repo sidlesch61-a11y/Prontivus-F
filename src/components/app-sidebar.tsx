@@ -42,6 +42,8 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getUserSettings } from "@/lib/settings-api";
+import { getUserMenu, MenuGroup, MenuItem as MenuItemType } from "@/lib/menu-api";
+import { getIconFromName } from "@/lib/icon-mapper";
 import {
   PatientProfileIcon,
   StethoscopeIcon,
@@ -459,6 +461,38 @@ export function AppSidebar() {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
+  const [menuGroups, setMenuGroups] = React.useState<MenuGroup[]>([]);
+  const [menuLoading, setMenuLoading] = React.useState(true);
+  const [useApiMenu, setUseApiMenu] = React.useState(true);
+
+  // Load user menu from API
+  React.useEffect(() => {
+    const loadMenu = async () => {
+      if (!user || !useApiMenu) {
+        setMenuLoading(false);
+        return;
+      }
+
+      try {
+        const menuData = await getUserMenu();
+        if (menuData.groups && menuData.groups.length > 0) {
+          setMenuGroups(menuData.groups);
+          setMenuLoading(false);
+        } else {
+          // Fallback to hardcoded menu if API returns empty
+          console.warn('Menu API returned empty, using fallback menu');
+          setUseApiMenu(false);
+          setMenuLoading(false);
+        }
+      } catch (error) {
+        console.error('Failed to load menu from API, using fallback:', error);
+        setUseApiMenu(false);
+        setMenuLoading(false);
+      }
+    };
+
+    loadMenu();
+  }, [user, useApiMenu]);
 
   // Load user avatar
   React.useEffect(() => {
@@ -493,46 +527,97 @@ export function AppSidebar() {
     return null;
   }
   
+  // Convert API menu groups to sidebar format
+  const convertApiMenuToSidebarFormat = () => {
+    const itemsByModule = new Map<string | null, any[]>();
+    
+    menuGroups.forEach(group => {
+      group.items.forEach(item => {
+        const module = group.name.toLowerCase().replace(/\s+/g, '_');
+        const moduleKey = mapGroupNameToModule(module);
+        
+        if (!itemsByModule.has(moduleKey)) {
+          itemsByModule.set(moduleKey, []);
+        }
+        
+        const IconComponent = getIconFromName(item.icon);
+        itemsByModule.get(moduleKey)!.push({
+          title: item.name,
+          icon: IconComponent,
+          url: item.route,
+          module: moduleKey,
+        });
+      });
+    });
+    
+    return itemsByModule;
+  };
+  
+  // Map group names to module keys
+  const mapGroupNameToModule = (groupName: string): string | null => {
+    const mapping: Record<string, string | null> = {
+      'dashboard': null,
+      'pacientes': 'patients',
+      'agendamentos': 'appointments',
+      'prontuário': 'clinical',
+      'financeiro': 'financial',
+      'estoque': 'stock',
+      'procedimentos': 'procedures',
+      'relatórios': 'bi',
+      'tiss': 'tiss',
+      'administração': null,
+      'configurações': null,
+    };
+    return mapping[groupName] || null;
+  };
+  
   // Get active modules from user's clinic
   const activeModules = user?.clinic?.active_modules || [];
   
-  // Get menu items based on user role
-  const menuItemsRaw = getMenuItemsByRole(user.role, activeModules)
-    .filter((i: any) => i.roles?.includes(user.role));
-  const menuItemsMap = new Map<string, any>();
-  for (const item of menuItemsRaw) {
-    if (!menuItemsMap.has(item.url)) menuItemsMap.set(item.url, item);
+  // Use API menu if available, otherwise fallback to hardcoded
+  let itemsByModule: Map<string | null, any[]>;
+  
+  if (useApiMenu && menuGroups.length > 0 && !menuLoading) {
+    itemsByModule = convertApiMenuToSidebarFormat();
+  } else {
+    // Fallback to hardcoded menu
+    const menuItemsRaw = getMenuItemsByRole(user.role, activeModules)
+      .filter((i: any) => i.roles?.includes(user.role));
+    const menuItemsMap = new Map<string, any>();
+    for (const item of menuItemsRaw) {
+      if (!menuItemsMap.has(item.url)) menuItemsMap.set(item.url, item);
+    }
+    const menuItems = Array.from(menuItemsMap.values());
+    const financialItems = getFinancialItems(user.role, activeModules);
+    const tissItems = getTissItems(user.role, activeModules);
+    
+    itemsByModule = new Map<string | null, any[]>();
+    const seenUrls = new Set<string>();
+    
+    menuItems.forEach(item => {
+      if (item.url?.startsWith('/financeiro')) {
+        return;
+      }
+      const module = item.module;
+      if (!itemsByModule.has(module)) {
+        itemsByModule.set(module, []);
+      }
+      if (!seenUrls.has(item.url)) {
+        itemsByModule.get(module)!.push(item);
+        seenUrls.add(item.url);
+      }
+    });
+    
+    if (financialItems.length > 0) {
+      itemsByModule.set('financial', [...financialItems]);
+    }
+    
+    if (tissItems.length > 0) {
+      itemsByModule.set('tiss', tissItems);
+    }
   }
-  const menuItems = Array.from(menuItemsMap.values());
-  const financialItems = getFinancialItems(user.role, activeModules);
-  const tissItems = getTissItems(user.role, activeModules);
+  
   const settingsItems = getSettingsItems(user.role);
-  
-  // Group items by module
-  const itemsByModule = new Map<string | null, any[]>();
-  const seenUrls = new Set<string>();
-  
-  menuItems.forEach(item => {
-    if (item.url?.startsWith('/financeiro')) {
-      return;
-    }
-    const module = item.module;
-    if (!itemsByModule.has(module)) {
-      itemsByModule.set(module, []);
-    }
-    if (!seenUrls.has(item.url)) {
-      itemsByModule.get(module)!.push(item);
-      seenUrls.add(item.url);
-    }
-  });
-  
-  if (financialItems.length > 0) {
-    itemsByModule.set('financial', [...financialItems]);
-  }
-  
-  if (tissItems.length > 0) {
-    itemsByModule.set('tiss', tissItems);
-  }
   
   // Get role display name
   const getRoleDisplayName = (role: string) => {
@@ -651,13 +736,19 @@ export function AppSidebar() {
 
       {/* Navigation Content */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1 sidebar-scrollbar">
-        {/* Dashboard - Always visible */}
-        {menuItems.filter(m => m.url === '/').map(item => (
-          <div key={item.url}>{renderNavItem(item)}</div>
-        ))}
+        {menuLoading ? (
+          <div className="px-4 py-8 text-center text-white/70 text-sm">
+            Carregando menu...
+          </div>
+        ) : (
+          <>
+            {/* Dashboard - Always visible */}
+            {itemsByModule.get(null)?.filter(m => m.url === '/dashboard' || m.url === '/').map(item => (
+              <div key={item.url}>{renderNavItem(item)}</div>
+            ))}
 
-        {/* Render grouped modules */}
-        {sortedModules
+            {/* Render grouped modules */}
+            {sortedModules
           .filter(module => module !== null || (itemsByModule.get(module)?.length ?? 0) > 1 || itemsByModule.get(module)?.[0]?.url !== '/')
           .map(module => {
             const items = itemsByModule.get(module)!;
@@ -704,6 +795,8 @@ export function AppSidebar() {
             
             return null;
           })}
+          </>
+        )}
 
         {/* System Settings */}
         {settingsItems.length > 0 && (

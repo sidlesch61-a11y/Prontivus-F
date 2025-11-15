@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
+  CreditCard,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -69,49 +70,182 @@ export default function PatientDashboard() {
   const [loading, setLoading] = React.useState(true);
   const healthMetrics: HealthMetric[] = [];
 
+  const [healthSummary, setHealthSummary] = React.useState({
+    activeConditions: 0,
+    activeMedications: 0,
+    lastMeasurementDate: null as Date | null,
+  });
+
   React.useEffect(() => {
     const load = async () => {
       try {
-        // Fetch current patient's appointments
-        const appts = await api.get<any[]>(`/api/appointments/patient-appointments`);
-        const now = new Date();
-        const future = appts
-          .filter(a => new Date(a.scheduled_datetime) >= now)
-          .sort((a,b) => new Date(a.scheduled_datetime).getTime() - new Date(b.scheduled_datetime).getTime());
-        const next = future[0];
-        if (next) {
-          setUpcomingAppointment({
-            id: next.id,
-            date: next.scheduled_datetime,
-            time: format(new Date(next.scheduled_datetime), "HH:mm"),
-            doctor: next.doctor_name,
-            specialty: next.appointment_type || "",
-            type: "virtual",
-            location: "",
+        // Fetch comprehensive patient dashboard data
+        let dashboardData: any;
+        try {
+          dashboardData = await api.get<any>(`/api/patient/dashboard`);
+        } catch (apiError: any) {
+          console.error("API request failed:", apiError);
+          // Check if it's a network error or parsing error
+          if (apiError.message && apiError.message.includes('JSON')) {
+            console.error("JSON parsing error - response may not be valid JSON");
+            toast.error("Erro ao processar resposta do servidor", {
+              description: "A resposta do servidor não está em formato válido. Tente novamente.",
+            });
+          } else if (apiError.status === 401) {
+            // Already handled by apiRequest - redirect to login
+            return;
+          } else {
+            toast.error("Erro ao carregar dashboard", {
+              description: apiError.message || "Não foi possível carregar os dados do dashboard",
+            });
+          }
+          setUpcomingAppointment(null);
+          setRecentActivity([]);
+          setHealthSummary({
+            activeConditions: 0,
+            activeMedications: 0,
+            lastMeasurementDate: null,
           });
+          return;
+        }
+        
+        // Validate response structure
+        if (!dashboardData) {
+          console.warn("Dashboard data is null or undefined");
+          setUpcomingAppointment(null);
+          setRecentActivity([]);
+          return;
+        }
+        
+        // Set upcoming appointment
+        if (dashboardData.upcoming_appointment) {
+          try {
+            const apt = dashboardData.upcoming_appointment;
+            const scheduledDate = apt.scheduled_datetime ? new Date(apt.scheduled_datetime) : null;
+            
+            if (scheduledDate && !isNaN(scheduledDate.getTime())) {
+              setUpcomingAppointment({
+                id: apt.id,
+                date: apt.scheduled_datetime,
+                time: format(scheduledDate, "HH:mm"),
+                doctor: apt.doctor_name || "Médico",
+                specialty: apt.doctor_specialty || apt.appointment_type || "",
+                type: apt.is_virtual ? "virtual" : "in-person",
+                location: apt.location || "",
+              });
+            } else {
+              setUpcomingAppointment(null);
+            }
+          } catch (err) {
+            console.error("Error parsing upcoming appointment:", err);
+            setUpcomingAppointment(null);
+          }
         } else {
           setUpcomingAppointment(null);
         }
 
-        // Recent activity from last 10 appointments
-        const recent = appts
-          .sort((a,b) => new Date(b.scheduled_datetime).getTime() - new Date(a.scheduled_datetime).getTime())
-          .slice(0, 10)
-          .map((a, idx) => ({
-            id: a.id,
-            type: "appointment" as const,
-            title: a.status === "completed" ? "Consulta Concluída" : "Consulta",
-            description: a.doctor_name,
-            date: format(new Date(a.scheduled_datetime), "dd/MM/yyyy HH:mm"),
-            icon: Calendar,
-          }));
-        setRecentActivity(recent);
+        // Set recent activities
+        try {
+          const activities = (dashboardData.recent_activities || []).map((activity: any) => {
+            let Icon = Calendar;
+            if (activity.type === "prescription") Icon = Pill;
+            else if (activity.type === "exam_result") Icon = TestTube;
+            else if (activity.type === "message") Icon = MessageCircle;
+            else if (activity.type === "payment") Icon = CreditCard;
+            
+            // Safely parse date
+            let formattedDate = "Data não disponível";
+            if (activity.date) {
+              try {
+                const activityDate = new Date(activity.date);
+                if (!isNaN(activityDate.getTime())) {
+                  formattedDate = format(activityDate, "dd/MM/yyyy HH:mm");
+                }
+              } catch (dateErr) {
+                console.warn("Error parsing activity date:", dateErr, activity);
+              }
+            }
+            
+            return {
+              id: activity.id || 0,
+              type: activity.type || "unknown",
+              title: activity.title || "Atividade",
+              description: activity.description || "",
+              date: formattedDate,
+              icon: Icon,
+            };
+          });
+          setRecentActivity(activities);
+        } catch (err) {
+          console.error("Error parsing recent activities:", err);
+          setRecentActivity([]);
+        }
+
+        // Set health summary
+        try {
+          if (dashboardData.health_summary) {
+            const summary = dashboardData.health_summary;
+            let lastMeasurementDate = null;
+            
+            if (summary.last_measurement_date) {
+              try {
+                const date = new Date(summary.last_measurement_date);
+                if (!isNaN(date.getTime())) {
+                  lastMeasurementDate = date;
+                }
+              } catch (dateErr) {
+                console.warn("Error parsing last measurement date:", dateErr);
+              }
+            }
+            
+            setHealthSummary({
+              activeConditions: Number(summary.active_conditions_count) || 0,
+              activeMedications: Number(summary.active_prescriptions_count) || 0,
+              lastMeasurementDate,
+            });
+          } else {
+            setHealthSummary({
+              activeConditions: 0,
+              activeMedications: 0,
+              lastMeasurementDate: null,
+            });
+          }
+        } catch (err) {
+          console.error("Error parsing health summary:", err);
+          setHealthSummary({
+            activeConditions: 0,
+            activeMedications: 0,
+            lastMeasurementDate: null,
+          });
+        }
       } catch (error: any) {
-        toast.error("Erro ao carregar dados", {
-          description: error?.message || "Não foi possível carregar suas informações",
-        });
+        console.error("Error loading dashboard:", error);
+        
+        // More detailed error logging
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+          console.error("Network error - check if backend is running");
+          toast.error("Erro de conexão", {
+            description: "Não foi possível conectar ao servidor. Verifique sua conexão.",
+          });
+        } else if (error instanceof SyntaxError) {
+          console.error("JSON parsing error:", error);
+          toast.error("Erro ao processar dados", {
+            description: "A resposta do servidor não está em formato válido.",
+          });
+        } else {
+          const errorMessage = error?.message || error?.detail || "Não foi possível carregar suas informações";
+          toast.error("Erro ao carregar dados", {
+            description: typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage),
+          });
+        }
+        
         setUpcomingAppointment(null);
         setRecentActivity([]);
+        setHealthSummary({
+          activeConditions: 0,
+          activeMedications: 0,
+          lastMeasurementDate: null,
+        });
       } finally {
         setLoading(false);
       }
@@ -159,6 +293,7 @@ export default function PatientDashboard() {
                   <Button
                     className="bg-blue-600 hover:bg-blue-700 text-white"
                     aria-label="Agendar nova consulta"
+                    onClick={() => window.location.href = "/patient/appointments"}
                   >
                     <Calendar className="h-4 w-4 mr-2" />
                     Agendar Consulta
@@ -167,6 +302,7 @@ export default function PatientDashboard() {
                     variant="outline"
                     className="border-teal-300 text-teal-700 hover:bg-teal-50"
                     aria-label="Ver resultados de exames"
+                    onClick={() => window.location.href = "/patient/test-results"}
                   >
                     <TestTube className="h-4 w-4 mr-2" />
                     Ver Exames
@@ -179,6 +315,7 @@ export default function PatientDashboard() {
                   variant="outline"
                   className="justify-start gap-2 h-12 border-2 border-blue-200 hover:border-blue-300 hover:bg-blue-50"
                   aria-label="Abrir mensagens"
+                  onClick={() => window.location.href = "/patient/messages"}
                 >
                   <MessageCircle className="h-4 w-4 text-blue-600" />
                   <span className="text-sm font-medium text-blue-700">Mensagens</span>
@@ -187,6 +324,7 @@ export default function PatientDashboard() {
                   variant="outline"
                   className="justify-start gap-2 h-12 border-2 border-teal-200 hover:border-teal-300 hover:bg-teal-50"
                   aria-label="Acessar prescrições"
+                  onClick={() => window.location.href = "/patient/prescriptions"}
                 >
                   <Pill className="h-4 w-4 text-teal-600" />
                   <span className="text-sm font-medium text-teal-700">Prescrições</span>
@@ -195,6 +333,7 @@ export default function PatientDashboard() {
                   variant="outline"
                   className="justify-start gap-2 h-12 border-2 border-green-200 hover:border-green-300 hover:bg-green-50"
                   aria-label="Ver registros médicos"
+                  onClick={() => window.location.href = "/patient/medical-records"}
                 >
                   <FileText className="h-4 w-4 text-green-600" />
                   <span className="text-sm font-medium text-green-700">Registros</span>
@@ -203,6 +342,7 @@ export default function PatientDashboard() {
                   variant="outline"
                   className="justify-start gap-2 h-12 border-2 border-blue-200 hover:border-blue-300 hover:bg-blue-50"
                   aria-label="Telemedicina"
+                  onClick={() => window.location.href = "/patient/telemedicine"}
                 >
                   <Video className="h-4 w-4 text-blue-600" />
                   <span className="text-sm font-medium text-blue-700">Telemedicina</span>
@@ -233,7 +373,9 @@ export default function PatientDashboard() {
                       <div>
                         <p className="text-sm text-gray-600 mb-1">Última Medição</p>
                         <p className="text-lg font-semibold text-blue-700">
-                          {format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                          {healthSummary.lastMeasurementDate
+                            ? format(healthSummary.lastMeasurementDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
+                            : "N/A"}
                         </p>
                       </div>
                       <Activity className="h-8 w-8 text-teal-500" />
@@ -241,18 +383,19 @@ export default function PatientDashboard() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-4 bg-white border-2 border-blue-100 rounded-lg hover:border-blue-300 transition-colors">
                         <p className="text-xs text-gray-500 mb-1">Condições Ativas</p>
-                        <p className="text-2xl font-bold text-blue-600">2</p>
+                        <p className="text-2xl font-bold text-blue-600">{healthSummary.activeConditions}</p>
                         <p className="text-xs text-gray-500 mt-1">Monitoradas</p>
                       </div>
                       <div className="p-4 bg-white border-2 border-teal-100 rounded-lg hover:border-teal-300 transition-colors">
                         <p className="text-xs text-gray-500 mb-1">Medicações</p>
-                        <p className="text-2xl font-bold text-teal-600">3</p>
+                        <p className="text-2xl font-bold text-teal-600">{healthSummary.activeMedications}</p>
                         <p className="text-xs text-gray-500 mt-1">Em uso</p>
                       </div>
                     </div>
                     <Button 
                       variant="outline" 
                       className="w-full border-blue-300 text-blue-700 hover:bg-blue-50"
+                      onClick={() => window.location.href = "/patient/health"}
                     >
                       Ver Detalhes
                       <ChevronRight className="h-4 w-4 ml-2" />
@@ -337,7 +480,10 @@ export default function PatientDashboard() {
                         <Calendar className="h-10 w-10 text-blue-600" />
                       </div>
                       <p className="text-gray-500 mb-4 font-medium">Nenhuma consulta agendada</p>
-                      <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                      <Button 
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                        onClick={() => window.location.href = "/patient/appointments"}
+                      >
                         <Calendar className="h-4 w-4 mr-2" />
                         Agendar Consulta
                       </Button>
@@ -402,6 +548,7 @@ export default function PatientDashboard() {
                   <Button 
                     variant="outline" 
                     className="w-full mt-4 border-teal-300 text-teal-700 hover:bg-teal-50"
+                    onClick={() => window.location.href = "/patient/medical-records"}
                   >
                     Ver Todas as Atividades
                     <ArrowRight className="h-4 w-4 ml-2" />
@@ -429,6 +576,7 @@ export default function PatientDashboard() {
                     <Button
                       variant="outline"
                       className="h-auto flex-col items-center justify-center p-5 border-2 border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all"
+                      onClick={() => window.location.href = "/patient/appointments"}
                     >
                       <Calendar className="h-6 w-6 mb-2 text-blue-600" />
                       <span className="text-sm font-medium text-blue-700">Agendar</span>
@@ -436,6 +584,7 @@ export default function PatientDashboard() {
                     <Button
                       variant="outline"
                       className="h-auto flex-col items-center justify-center p-5 border-2 border-teal-200 hover:bg-teal-50 hover:border-teal-300 transition-all"
+                      onClick={() => window.location.href = "/patient/messages"}
                     >
                       <MessageCircle className="h-6 w-6 mb-2 text-teal-600" />
                       <span className="text-sm font-medium text-teal-700">Mensagens</span>
@@ -443,13 +592,15 @@ export default function PatientDashboard() {
                     <Button
                       variant="outline"
                       className="h-auto flex-col items-center justify-center p-5 border-2 border-green-200 hover:bg-green-50 hover:border-green-300 transition-all"
+                      onClick={() => window.location.href = "/patient/medical-records"}
                     >
                       <FileText className="h-6 w-6 mb-2 text-green-600" />
-                      <span className="text-sm font-medium text-green-700">Upload</span>
+                      <span className="text-sm font-medium text-green-700">Registros</span>
                     </Button>
                     <Button
                       variant="outline"
                       className="h-auto flex-col items-center justify-center p-5 border-2 border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all"
+                      onClick={() => window.location.href = "/patient/test-results"}
                     >
                       <TestTube className="h-6 w-6 mb-2 text-blue-600" />
                       <span className="text-sm font-medium text-blue-700">Resultados</span>

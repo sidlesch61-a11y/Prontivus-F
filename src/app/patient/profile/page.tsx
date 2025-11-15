@@ -144,18 +144,34 @@ export default function PatientProfilePage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [patientData, historyData] = await Promise.all([
-        api.get<PatientProfile>("/api/patients/me"),
-        clinicalRecordsApi.getPatientHistory().catch(() => []),
-      ]);
       
-      setProfile(patientData);
-      setProfileForm(patientData);
-      setClinicalHistory(historyData || []);
+      // Load patient profile
+      let patientData: PatientProfile;
+      try {
+        patientData = await api.get<PatientProfile>("/api/patients/me");
+        setProfile(patientData);
+        setProfileForm(patientData);
+      } catch (profileError: any) {
+        console.error("Failed to load patient profile:", profileError);
+        toast.error("Erro ao carregar perfil", {
+          description: profileError?.message || profileError?.detail || "Não foi possível carregar seu perfil",
+        });
+        return;
+      }
+      
+      // Load clinical history (optional, don't fail if it errors)
+      try {
+        const historyData = await clinicalRecordsApi.getPatientHistory();
+        setClinicalHistory(historyData || []);
+      } catch (historyError: any) {
+        console.warn("Failed to load clinical history:", historyError);
+        // Don't show error toast for history, it's optional
+        setClinicalHistory([]);
+      }
     } catch (error: any) {
       console.error("Failed to load data:", error);
-      toast.error("Erro ao carregar perfil", {
-        description: error.message || "Não foi possível carregar seu perfil",
+      toast.error("Erro ao carregar dados", {
+        description: error?.message || error?.detail || "Não foi possível carregar os dados",
       });
     } finally {
       setLoading(false);
@@ -207,19 +223,31 @@ export default function PatientProfilePage() {
     }
 
     // Extract from clinical history
-    clinicalHistory.forEach(item => {
-      if (item.clinical_record) {
-        // Diagnoses
-        item.clinical_record.diagnoses?.forEach(d => {
-          conditions.add(d.description || d.code);
-        });
+    if (clinicalHistory && Array.isArray(clinicalHistory)) {
+      clinicalHistory.forEach(item => {
+        if (item?.clinical_record) {
+          // Diagnoses
+          if (item.clinical_record.diagnoses && Array.isArray(item.clinical_record.diagnoses)) {
+            item.clinical_record.diagnoses.forEach((d: any) => {
+              if (d?.description || d?.code) {
+                conditions.add(d.description || d.code);
+              }
+            });
+          }
 
-        // Prescriptions
-        item.clinical_record.prescriptions?.forEach(p => {
-          medications.add(`${p.medication} ${p.dosage}`);
-        });
-      }
-    });
+          // Prescriptions
+          if (item.clinical_record.prescriptions && Array.isArray(item.clinical_record.prescriptions)) {
+            item.clinical_record.prescriptions.forEach((p: any) => {
+              if (p?.medication) {
+                const medName = p.medication;
+                const dosage = p.dosage || "";
+                medications.add(`${medName} ${dosage}`.trim());
+              }
+            });
+          }
+        }
+      });
+    }
 
     return {
       conditions: Array.from(conditions),
@@ -237,7 +265,18 @@ export default function PatientProfilePage() {
     
     try {
       setSaving(true);
-      const updated = await api.put<PatientProfile>("/api/patients/me", profileForm);
+      
+      // Prepare update data, converting date_of_birth to proper format if needed
+      const updateData = { ...profileForm };
+      if (updateData.date_of_birth && typeof updateData.date_of_birth === 'string') {
+        // If it's already in ISO format, keep it; otherwise convert
+        if (!updateData.date_of_birth.includes('T')) {
+          // It's a date string, ensure it's in YYYY-MM-DD format
+          updateData.date_of_birth = updateData.date_of_birth.split('T')[0];
+        }
+      }
+      
+      const updated = await api.put<PatientProfile>("/api/patients/me", updateData);
       setProfile(updated);
       setProfileForm(updated);
       setIsEditing(false);
@@ -245,7 +284,7 @@ export default function PatientProfilePage() {
     } catch (error: any) {
       console.error("Failed to save profile:", error);
       toast.error("Erro ao salvar perfil", {
-        description: error.message || "Não foi possível atualizar seu perfil",
+        description: error?.message || error?.detail || "Não foi possível atualizar seu perfil",
       });
     } finally {
       setSaving(false);
@@ -474,7 +513,7 @@ export default function PatientProfilePage() {
                           ? (typeof profileForm.date_of_birth === 'string'
                               ? (profileForm.date_of_birth.includes('T') 
                                   ? format(parseISO(profileForm.date_of_birth), "yyyy-MM-dd")
-                                  : profileForm.date_of_birth)
+                                  : profileForm.date_of_birth.split('T')[0]) // Handle date strings
                               : format(new Date(profileForm.date_of_birth), "yyyy-MM-dd"))
                           : ""}
                         onChange={(e) => handleProfileChange("date_of_birth", e.target.value)}

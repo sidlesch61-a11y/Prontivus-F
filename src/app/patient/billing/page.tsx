@@ -146,33 +146,49 @@ export default function PatientBillingPage() {
   }, [invoices, searchQuery]);
 
   const totalAmount = useMemo(() => {
-    return invoices.reduce((sum, inv) => sum + Number(inv.total_amount), 0);
+    return invoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0);
   }, [invoices]);
 
   const paidAmount = useMemo(() => {
     return invoices
-      .filter(inv => inv.status === "paid")
-      .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
+      .filter(inv => {
+        const status = inv.status?.toLowerCase() || "";
+        return status === "paid" || status === "pago";
+      })
+      .reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0);
   }, [invoices]);
 
   const pendingAmount = useMemo(() => {
     return invoices
-      .filter(inv => inv.status === "pending" || inv.status === "overdue")
-      .reduce((sum, inv) => sum + Number(inv.total_amount), 0);
+      .filter(inv => {
+        const status = inv.status?.toLowerCase() || "";
+        return status === "pending" || status === "pendente" || status === "issued" || status === "overdue" || status === "vencido";
+      })
+      .reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0);
   }, [invoices]);
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
+    // Handle both enum values and string values
+    const statusLower = status?.toLowerCase() || "";
+    switch (statusLower) {
       case "paid":
+      case "pago":
         return <Badge className="bg-green-100 text-green-700"><CheckCircle2 className="h-3 w-3 mr-1" />Pago</Badge>;
       case "pending":
+      case "pendente":
+      case "issued":
         return <Badge className="bg-yellow-100 text-yellow-700"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
       case "overdue":
+      case "vencido":
         return <Badge className="bg-red-100 text-red-700"><AlertCircle className="h-3 w-3 mr-1" />Vencido</Badge>;
       case "cancelled":
+      case "cancelado":
         return <Badge className="bg-gray-100 text-gray-700"><XCircle className="h-3 w-3 mr-1" />Cancelado</Badge>;
-      default:
+      case "draft":
+      case "rascunho":
         return <Badge variant="outline">Rascunho</Badge>;
+      default:
+        return <Badge variant="outline">{status || "Desconhecido"}</Badge>;
     }
   };
 
@@ -186,9 +202,12 @@ export default function PatientBillingPage() {
   const handleDownloadInvoice = async (invoiceId: number) => {
     try {
       // Try to get invoice PDF if available
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/financial/invoices/${invoiceId}/pdf`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const token = localStorage.getItem('clinicore_access_token');
+      
+      const response = await fetch(`${apiUrl}/api/financial/invoices/${invoiceId}/pdf`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('clinicore_access_token')}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
       
@@ -203,12 +222,23 @@ export default function PatientBillingPage() {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
         toast.success("Fatura baixada com sucesso");
+      } else if (response.status === 404) {
+        // PDF endpoint not available, show info message
+        toast.info("Download de PDF ainda não disponível", {
+          description: "Esta funcionalidade será implementada em breve",
+        });
       } else {
-        toast.error("Não foi possível baixar a fatura");
+        const errorText = await response.text();
+        console.error("Failed to download invoice:", errorText);
+        toast.error("Não foi possível baixar a fatura", {
+          description: response.statusText || "Erro ao baixar o arquivo",
+        });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to download invoice:", error);
-      toast.error("Não foi possível baixar a fatura");
+      toast.error("Não foi possível baixar a fatura", {
+        description: error?.message || "Erro de conexão",
+      });
     }
   };
 
@@ -265,7 +295,10 @@ export default function PatientBillingPage() {
               <CardContent>
                 <div className="text-2xl font-bold text-green-600">{formatCurrency(paidAmount)}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {invoices.filter(inv => inv.status === "paid").length} fatura(s) paga(s)
+                  {invoices.filter(inv => {
+                    const status = inv.status?.toLowerCase() || "";
+                    return status === "paid" || status === "pago";
+                  }).length} fatura(s) paga(s)
                 </p>
               </CardContent>
             </Card>
@@ -277,7 +310,10 @@ export default function PatientBillingPage() {
               <CardContent>
                 <div className="text-2xl font-bold text-orange-600">{formatCurrency(pendingAmount)}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {invoices.filter(inv => inv.status === "pending" || inv.status === "overdue").length} fatura(s) pendente(s)
+                  {invoices.filter(inv => {
+                    const status = inv.status?.toLowerCase() || "";
+                    return status === "pending" || status === "pendente" || status === "issued" || status === "overdue" || status === "vencido";
+                  }).length} fatura(s) pendente(s)
                 </p>
               </CardContent>
             </Card>
@@ -390,7 +426,11 @@ export default function PatientBillingPage() {
                           <TableRow key={invoice.id}>
                             <TableCell className="font-medium">#{invoice.id}</TableCell>
                             <TableCell>
-                              {format(parseISO(invoice.issue_date), "dd/MM/yyyy", { locale: ptBR })}
+                              {invoice.issue_date ? (
+                                format(parseISO(invoice.issue_date), "dd/MM/yyyy", { locale: ptBR })
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
                             </TableCell>
                             <TableCell>
                               {invoice.due_date ? (
@@ -401,9 +441,9 @@ export default function PatientBillingPage() {
                             </TableCell>
                             <TableCell className="max-w-xs truncate">{description}</TableCell>
                             <TableCell className="text-right font-semibold">
-                              {formatCurrency(Number(invoice.total_amount))}
+                              {formatCurrency(Number(invoice.total_amount || 0))}
                             </TableCell>
-                            <TableCell>{getStatusBadge(invoice.status)}</TableCell>
+                            <TableCell>{getStatusBadge(invoice.status || "")}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <Button

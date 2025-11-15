@@ -44,6 +44,7 @@ import { PatientSidebar } from "@/components/patient/Navigation/PatientSidebar";
 import { PatientMobileNav } from "@/components/patient/Navigation/PatientMobileNav";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 // Types
 interface Doctor {
@@ -115,41 +116,93 @@ export default function PatientAppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+
+  // Helper function to map appointments data
+  const mapAppointments = (appts: any[], doctorsList: Doctor[]): Appointment[] => {
+    const statusMap: Record<string, string> = {
+      'scheduled': 'scheduled',
+      'checked_in': 'confirmed',
+      'in_consultation': 'confirmed',
+      'completed': 'completed',
+      'cancelled': 'cancelled',
+    };
+    
+    return appts.map((a: any) => {
+      // Handle status - can be enum object or string
+      let statusValue = 'scheduled';
+      if (typeof a.status === 'string') {
+        statusValue = statusMap[a.status.toLowerCase()] || a.status.toLowerCase();
+      } else if (a.status?.value) {
+        statusValue = statusMap[a.status.value.toLowerCase()] || a.status.value.toLowerCase();
+      }
+      
+      // Parse doctor name
+      const doctorName = a.doctor_name || '';
+      const nameParts = doctorName.split(' ');
+      const firstName = nameParts[0] || 'Médico';
+      const lastName = nameParts.slice(1).join(' ') || '';
+      
+      return {
+        id: a.id,
+        scheduled_datetime: a.scheduled_datetime,
+        duration_minutes: a.duration_minutes || 30,
+        status: statusValue as any,
+        appointment_type: (a.appointment_type || 'consultation') as any,
+        reason: a.reason || undefined,
+        notes: a.notes || undefined,
+        doctor: {
+          id: a.doctor_id,
+          first_name: firstName,
+          last_name: lastName,
+          specialty: doctorsList.find(d => d.id === a.doctor_id)?.specialty || 'Clínico Geral',
+        } as Doctor,
+        location: undefined,
+        preparation_checklist: undefined,
+        visit_summary: undefined,
+      };
+    });
+  };
+
+  // Helper function to reload appointments
+  const reloadAppointments = async () => {
+    try {
+      const [appts, doctorsData] = await Promise.all([
+        api.get<any[]>(`/api/appointments/patient-appointments`),
+        api.get<any[]>(`/api/users/doctors`),
+      ]);
+      
+      // Map doctors
+      const doctorsList: Doctor[] = doctorsData.map((d: any) => ({
+        id: d.id,
+        first_name: d.first_name || d.username || 'Médico',
+        last_name: d.last_name || '',
+        specialty: d.specialty || 'Clínico Geral',
+      }));
+      setDoctors(doctorsList);
+      
+      // Map appointments
+      const mapped = mapAppointments(appts, doctorsList);
+      setAppointments(mapped);
+    } catch (error: any) {
+      console.error("Error reloading appointments:", error);
+      toast.error("Erro ao carregar agendamentos", {
+        description: error?.message || "Não foi possível carregar os agendamentos",
+      });
+    }
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
-        const [appts, doctors] = await Promise.all([
-          api.get<any[]>(`/api/appointments/patient-appointments`),
-          api.get<any[]>(`/api/users/doctors`),
-        ]);
-        // Map doctors by name for display enrichment
-        const docById = new Map<number, Partial<Doctor>>();
-        doctors.forEach((d: any) => {
-          docById.set(d.id, {
-            id: d.id,
-            first_name: (d.first_name || (d.username || '')).toString(),
-            last_name: (d.last_name || '').toString(),
-            specialty: d.specialty || undefined,
-          });
+        await reloadAppointments();
+      } catch (error: any) {
+        console.error("Error loading appointments:", error);
+        toast.error("Erro ao carregar dados", {
+          description: error?.message || "Não foi possível carregar as informações",
         });
-        const mapped: Appointment[] = appts.map((a: any) => ({
-          id: a.id,
-          scheduled_datetime: a.scheduled_datetime,
-          duration_minutes: a.duration_minutes,
-          status: (a.status || 'scheduled').toLowerCase(),
-          appointment_type: (a.appointment_type || 'consultation'),
-          reason: a.reason || undefined,
-          notes: a.notes || undefined,
-          doctor: {
-            id: a.doctor_id,
-            first_name: (docById.get(a.doctor_id)?.first_name as string) || (a.doctor_name?.split(' ')[0] || 'Médico'),
-            last_name: (docById.get(a.doctor_id)?.last_name as string) || (a.doctor_name?.split(' ').slice(1).join(' ') || ''),
-          } as Doctor,
-          location: undefined,
-          preparation_checklist: undefined,
-          visit_summary: undefined,
-        }));
-        setAppointments(mapped);
+        setAppointments([]);
+        setDoctors([]);
       } finally {
         setLoading(false);
       }
@@ -189,24 +242,45 @@ export default function PatientAppointmentsPage() {
       .sort((a, b) => parseISO(b.scheduled_datetime).getTime() - parseISO(a.scheduled_datetime).getTime());
   }, [appointments]);
 
-  // Available time slots
-  const timeSlots = useMemo(() => {
-    if (!selectedDoctor) return [];
-    const slots = [];
-    const startHour = 8;
-    const endHour = 18;
-    
-    for (let hour = startHour; hour < endHour; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
-        const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        slots.push({
-          time: timeString,
-          available: Math.random() > 0.3, // Mock availability
-        });
+  const [timeSlots, setTimeSlots] = useState<Array<{time: string; available: boolean; datetime?: string}>>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  // Load available time slots when doctor and date are selected
+  useEffect(() => {
+    const loadTimeSlots = async () => {
+      if (!selectedDoctor || !selectedDate) {
+        setTimeSlots([]);
+        return;
       }
-    }
-    return slots;
-  }, [selectedDoctor]);
+      
+      setLoadingSlots(true);
+      try {
+        const dateStr = format(selectedDate, 'yyyy-MM-dd');
+        const availability = await api.get<any>(`/api/appointments/doctor/${selectedDoctor.id}/availability?date=${dateStr}`);
+        setTimeSlots(availability.slots || []);
+      } catch (error: any) {
+        console.error("Error loading time slots:", error);
+        // Fallback to default slots if API fails
+        const slots = [];
+        const startHour = 8;
+        const endHour = 18;
+        for (let hour = startHour; hour < endHour; hour++) {
+          for (let minute = 0; minute < 60; minute += 30) {
+            const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+            slots.push({
+              time: timeString,
+              available: true,
+            });
+          }
+        }
+        setTimeSlots(slots);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+    
+    loadTimeSlots();
+  }, [selectedDoctor, selectedDate]);
 
   const togglePastExpand = (id: number) => {
     const newExpanded = new Set(expandedPast);
@@ -242,18 +316,63 @@ export default function PatientAppointmentsPage() {
   };
 
   const handleBookAppointment = async () => {
+    if (!selectedDoctor || !selectedDate || !selectedTime) {
+      return;
+    }
+    
     setIsBooking(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setIsBooking(false);
-    setShowBookingModal(false);
-    setBookingStep(1);
-    setSelectedDoctor(null);
-    setSelectedDate(new Date());
-    setSelectedTime('');
-    setSelectedSymptoms([]);
-    setReason('');
-    // Show success message
+    try {
+      // Get patient ID from current user
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        throw new Error('User not found');
+      }
+      
+      // Combine date and time
+      const [hours, minutes] = selectedTime.split(':');
+      const appointmentDateTime = new Date(selectedDate);
+      appointmentDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      
+      // Get patient record
+      const patientData = await api.get<any>(`/api/patients/me`);
+      
+      // Create appointment
+      const appointmentData = {
+        patient_id: patientData.id,
+        doctor_id: selectedDoctor.id,
+        clinic_id: patientData.clinic_id,
+        scheduled_datetime: appointmentDateTime.toISOString(),
+        appointment_type: appointmentType === 'telemedicine' ? 'telemedicine' : 'consultation',
+        reason: selectedSymptoms.join(', ') + (reason ? ` - ${reason}` : ''),
+        duration_minutes: 30,
+      };
+      
+      await api.post(`/api/appointments/patient/book`, appointmentData);
+      
+      // Reload appointments
+      await reloadAppointments();
+      
+      // Reset form
+      setShowBookingModal(false);
+      setBookingStep(1);
+      setSelectedDoctor(null);
+      setSelectedDate(new Date());
+      setSelectedTime('');
+      setSelectedSymptoms([]);
+      setReason('');
+      
+      // Show success message
+      toast.success('Consulta agendada com sucesso!', {
+        description: `Agendamento confirmado para ${format(appointmentDateTime, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+      });
+    } catch (error: any) {
+      console.error("Error booking appointment:", error);
+      toast.error('Erro ao agendar consulta', {
+        description: error?.message || 'Não foi possível agendar a consulta. Tente novamente.',
+      });
+    } finally {
+      setIsBooking(false);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -518,17 +637,24 @@ export default function PatientAppointmentsPage() {
                           variant="outline"
                           size="sm"
                           onClick={async () => {
-                            // Simple reschedule to +7 days same time
-                            const current = parseISO(appointment.scheduled_datetime);
-                            const newDate = addDays(current, 7);
-                            await api.post(`/api/appointments/${appointment.id}/reschedule`, {
-                              scheduled_datetime: newDate.toISOString(),
-                            });
-                            // reload
-                            const appts = await api.get<any[]>(`/api/appointments/patient-appointments`);
-                            setAppointments(appts.map((a:any)=>({
-                              id:a.id, scheduled_datetime:a.scheduled_datetime, duration_minutes:a.duration_minutes, status:(a.status||'scheduled').toLowerCase(), appointment_type:(a.appointment_type||'consultation'), reason:a.reason, notes:a.notes, doctor:{ id:a.doctor_id, first_name:a.doctor_name?.split(' ')[0]||'Médico', last_name:a.doctor_name?.split(' ').slice(1).join(' ')||''} as Doctor
-                            })) as any);
+                            try {
+                              // Simple reschedule to +7 days same time
+                              const current = parseISO(appointment.scheduled_datetime);
+                              const newDate = addDays(current, 7);
+                              await api.post(`/api/appointments/${appointment.id}/reschedule`, {
+                                scheduled_datetime: newDate.toISOString(),
+                              });
+                              // Reload appointments
+                              await reloadAppointments();
+                              toast.success('Consulta reagendada com sucesso!', {
+                                description: `Nova data: ${format(newDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+                              });
+                            } catch (error: any) {
+                              console.error("Error rescheduling:", error);
+                              toast.error('Erro ao reagendar consulta', {
+                                description: error?.message || 'Não foi possível reagendar a consulta.',
+                              });
+                            }
                           }}
                         >
                           <CalendarIcon className="h-4 w-4 mr-2" />
@@ -539,11 +665,20 @@ export default function PatientAppointmentsPage() {
                           size="sm"
                           className="text-red-600 hover:text-red-700"
                           onClick={async () => {
-                            await api.post(`/api/appointments/${appointment.id}/cancel`, {});
-                            const appts = await api.get<any[]>(`/api/appointments/patient-appointments`);
-                            setAppointments(appts.map((a:any)=>({
-                              id:a.id, scheduled_datetime:a.scheduled_datetime, duration_minutes:a.duration_minutes, status:(a.status||'scheduled').toLowerCase(), appointment_type:(a.appointment_type||'consultation'), reason:a.reason, notes:a.notes, doctor:{ id:a.doctor_id, first_name:a.doctor_name?.split(' ')[0]||'Médico', last_name:a.doctor_name?.split(' ').slice(1).join(' ')||''} as Doctor
-                            })) as any);
+                            if (!confirm('Tem certeza que deseja cancelar esta consulta?')) {
+                              return;
+                            }
+                            try {
+                              await api.post(`/api/appointments/${appointment.id}/cancel`, {});
+                              // Reload appointments
+                              await reloadAppointments();
+                              toast.success('Consulta cancelada com sucesso!');
+                            } catch (error: any) {
+                              console.error("Error cancelling:", error);
+                              toast.error('Erro ao cancelar consulta', {
+                                description: error?.message || 'Não foi possível cancelar a consulta.',
+                              });
+                            }
                           }}
                         >
                           <X className="h-4 w-4 mr-2" />
@@ -731,7 +866,7 @@ export default function PatientAppointmentsPage() {
                       />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto">
-                      {mockDoctors
+                      {doctors
                         .filter(doctor =>
                           !searchQuery ||
                           `${doctor.first_name} ${doctor.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -841,19 +976,33 @@ export default function PatientAppointmentsPage() {
                           </Card>
                         </div>
                         <div className="text-sm font-medium text-gray-700 mb-2">Horário</div>
-                        <div className="grid grid-cols-3 gap-2 max-h-[300px] overflow-y-auto">
-                          {timeSlots.filter(slot => slot.available).map((slot) => (
-                            <Button
-                              key={slot.time}
-                              variant={selectedTime === slot.time ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => setSelectedTime(slot.time)}
-                              className={selectedTime === slot.time ? 'bg-blue-600 hover:bg-blue-700' : ''}
-                            >
-                              {slot.time}
-                            </Button>
-                          ))}
-                        </div>
+                        {loadingSlots ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                            <span className="ml-2 text-sm text-gray-600">Carregando horários...</span>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-3 gap-2 max-h-[300px] overflow-y-auto">
+                            {timeSlots.filter(slot => slot.available).length === 0 ? (
+                              <div className="col-span-3 text-center py-4 text-sm text-gray-500">
+                                Nenhum horário disponível para esta data
+                              </div>
+                            ) : (
+                              timeSlots.filter(slot => slot.available).map((slot) => (
+                                <Button
+                                  key={slot.time}
+                                  variant={selectedTime === slot.time ? 'default' : 'outline'}
+                                  size="sm"
+                                  onClick={() => setSelectedTime(slot.time)}
+                                  className={selectedTime === slot.time ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                                  disabled={!slot.available}
+                                >
+                                  {slot.time}
+                                </Button>
+                              ))
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

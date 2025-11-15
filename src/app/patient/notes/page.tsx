@@ -14,7 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Plus, Pencil, Trash2, Save, X, NotebookText, Calendar, User, Stethoscope } from "lucide-react";
+import { Plus, Pencil, Trash2, Save, X, NotebookText, Calendar, User, Stethoscope, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 type PatientProfile = {
   id: number;
@@ -55,21 +56,35 @@ export default function PatientNotesPage() {
 
   const [editing, setEditing] = useState<PersonalNote | null>(null);
 
+  // Helper function to reload all data
+  const reloadData = async () => {
+    try {
+      const [p, h] = await Promise.all([
+        api.get<PatientProfile>(`/api/patients/me`),
+        api.get<HistoryItem[]>(`/api/clinical/me/history`),
+      ]);
+      setProfile(p);
+      try {
+        const parsed = p.notes ? JSON.parse(p.notes) : [];
+        setNotes(Array.isArray(parsed) ? parsed : []);
+      } catch (error) {
+        console.warn("Error parsing notes:", error);
+        setNotes([]);
+      }
+      setHistory(h);
+    } catch (error: any) {
+      console.error("Error loading notes data:", error);
+      toast.error("Erro ao carregar notas", {
+        description: error?.message || "Não foi possível carregar suas notas",
+      });
+    }
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
-        const [p, h] = await Promise.all([
-          api.get<PatientProfile>(`/api/patients/me`),
-          api.get<HistoryItem[]>(`/api/clinical/me/history`),
-        ]);
-        setProfile(p);
-        try {
-          const parsed = p.notes ? JSON.parse(p.notes) : [];
-          setNotes(Array.isArray(parsed) ? parsed : []);
-        } catch {
-          setNotes([]);
-        }
-        setHistory(h);
+        setLoading(true);
+        await reloadData();
       } finally {
         setLoading(false);
       }
@@ -78,41 +93,69 @@ export default function PatientNotesPage() {
   }, []);
 
   const saveNotes = async (nextNotes: PersonalNote[]) => {
-    if (!profile) return;
+    if (!profile) {
+      toast.error("Perfil não encontrado");
+      return;
+    }
     setSaving(true);
     try {
       const updated = await api.put<PatientProfile>(`/api/patients/me`, { notes: JSON.stringify(nextNotes) });
       setProfile(updated as PatientProfile);
       setNotes(nextNotes);
+      toast.success("Notas salvas com sucesso!");
+    } catch (error: any) {
+      console.error("Error saving notes:", error);
+      toast.error("Erro ao salvar notas", {
+        description: error?.message || "Não foi possível salvar suas notas",
+      });
+      throw error; // Re-throw to allow caller to handle
     } finally {
       setSaving(false);
     }
   };
 
   const addNote = async () => {
-    if (!newTitle.trim() && !newContent.trim()) return;
-    const now = new Date().toISOString();
-    const note: PersonalNote = {
-      id: crypto.randomUUID(),
-      title: newTitle.trim() || "Sem título",
-      content: newContent.trim(),
-      created_at: now,
-      updated_at: now,
-    };
-    await saveNotes([note, ...notes]);
-    setNewTitle("");
-    setNewContent("");
+    if (!newTitle.trim() && !newContent.trim()) {
+      toast.error("Por favor, preencha pelo menos o título ou o conteúdo da nota");
+      return;
+    }
+    try {
+      const now = new Date().toISOString();
+      const note: PersonalNote = {
+        id: crypto.randomUUID(),
+        title: newTitle.trim() || "Sem título",
+        content: newContent.trim(),
+        created_at: now,
+        updated_at: now,
+      };
+      await saveNotes([note, ...notes]);
+      setNewTitle("");
+      setNewContent("");
+    } catch (error) {
+      // Error already handled in saveNotes
+    }
   };
 
   const updateNote = async (updated: PersonalNote) => {
-    const next = notes.map(n => (n.id === updated.id ? { ...updated, updated_at: new Date().toISOString() } : n));
-    await saveNotes(next);
-    setEditing(null);
+    try {
+      const next = notes.map(n => (n.id === updated.id ? { ...updated, updated_at: new Date().toISOString() } : n));
+      await saveNotes(next);
+      setEditing(null);
+    } catch (error) {
+      // Error already handled in saveNotes
+    }
   };
 
   const deleteNote = async (id: string) => {
-    const next = notes.filter(n => n.id !== id);
-    await saveNotes(next);
+    if (!confirm('Tem certeza que deseja excluir esta nota?')) {
+      return;
+    }
+    try {
+      const next = notes.filter(n => n.id !== id);
+      await saveNotes(next);
+    } catch (error) {
+      // Error already handled in saveNotes
+    }
   };
 
   const recentClinicalNotes = useMemo(() => {
@@ -124,8 +167,24 @@ export default function PatientNotesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50/30">
+        <PatientHeader showSearch={false} notificationCount={3} />
+        <PatientMobileNav />
+        <div className="flex">
+          <div className="hidden lg:block">
+            <PatientSidebar />
+          </div>
+          <main className="flex-1 p-4 lg:p-6 pb-20 lg:pb-6 max-w-7xl mx-auto w-full">
+            <Card className="border-l-4 border-l-blue-500 bg-white/80 backdrop-blur-sm">
+              <CardContent className="py-12 text-center">
+                <div className="p-4 bg-blue-100 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                  <RefreshCw className="h-10 w-10 text-blue-600 animate-spin" />
+                </div>
+                <p className="text-gray-500 font-medium">Carregando suas notas...</p>
+              </CardContent>
+            </Card>
+          </main>
+        </div>
       </div>
     );
   }
@@ -175,8 +234,20 @@ export default function PatientNotesPage() {
                     <Textarea placeholder="Sua nota" value={newContent} onChange={(e) => setNewContent(e.target.value)} rows={3} />
                   </div>
                 </div>
-                <Button disabled={saving} onClick={addNote} className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="h-4 w-4 mr-2" /> Adicionar nota
+                <Button 
+                  disabled={saving || (!newTitle.trim() && !newContent.trim())} 
+                  onClick={addNote} 
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {saving ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" /> Adicionar nota
+                    </>
+                  )}
                 </Button>
 
                 <div className="mt-6">
@@ -197,10 +268,21 @@ export default function PatientNotesPage() {
                             <TableCell className="font-medium">{n.title}</TableCell>
                             <TableCell>{n.updated_at ? format(parseISO(n.updated_at), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "-"}</TableCell>
                             <TableCell className="text-right space-x-2">
-                              <Button size="sm" variant="outline" onClick={() => setEditing(n)}>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={() => setEditing(n)}
+                                disabled={saving}
+                              >
                                 <Pencil className="h-4 w-4 mr-1" /> Editar
                               </Button>
-                              <Button size="sm" variant="outline" className="text-red-600" onClick={() => deleteNote(n.id)}>
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50" 
+                                onClick={() => deleteNote(n.id)}
+                                disabled={saving}
+                              >
                                 <Trash2 className="h-4 w-4 mr-1" /> Excluir
                               </Button>
                             </TableCell>
@@ -275,6 +357,54 @@ export default function PatientNotesPage() {
           </div>
         </main>
       </div>
+
+      {/* Edit Note Dialog */}
+      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar Nota</DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <div className="space-y-4">
+              <Input
+                placeholder="Título"
+                value={editing.title}
+                onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+              />
+              <Textarea
+                placeholder="Conteúdo da nota"
+                value={editing.content}
+                onChange={(e) => setEditing({ ...editing, content: e.target.value })}
+                rows={8}
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setEditing(null)}
+                  disabled={saving}
+                >
+                  <X className="h-4 w-4 mr-2" /> Cancelar
+                </Button>
+                <Button
+                  onClick={() => updateNote(editing)}
+                  disabled={saving || (!editing.title.trim() && !editing.content.trim())}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {saving ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" /> Salvar
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

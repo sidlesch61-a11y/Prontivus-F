@@ -39,6 +39,7 @@ import { PatientMobileNav } from "@/components/patient/Navigation/PatientMobileN
 import { LineChart } from "@/components/charts";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 // Types
 interface TestResult {
@@ -115,43 +116,128 @@ export default function TestResultsPage() {
   const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
   const [selectedReport, setSelectedReport] = useState<LabReport | null>(null);
   const [reports, setReports] = useState<LabReport[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Helper function to determine status from exam data
+  const getExamStatus = (exam: any): 'normal' | 'borderline' | 'abnormal' | 'critical' => {
+    // If exam is not completed (status is "pending"), it's pending (borderline)
+    if (exam.status === 'pending' || !exam.completed_date) {
+      return 'borderline'; // Pending
+    }
+    
+    // If exam has abnormalities, check if it's critical
+    if (exam.has_abnormalities) {
+      // Check if description contains critical keywords
+      const description = (exam.description || '').toLowerCase();
+      const criticalKeywords = ['crítico', 'critico', 'emergência', 'emergencia', 'urgente'];
+      if (criticalKeywords.some(keyword => description.includes(keyword))) {
+        return 'critical';
+      }
+      return 'abnormal';
+    }
+    
+    return 'normal';
+  };
+
+  // Helper function to parse exam description for values
+  const parseExamDescription = (description: string): { value: string | number; unit: string; referenceRange: string } => {
+    if (!description) {
+      return { value: '-', unit: '', referenceRange: '-' };
+    }
+
+    // Try to extract numeric values and units from description
+    // This is a simple parser - can be enhanced based on actual data format
+    const numberMatch = description.match(/(\d+\.?\d*)\s*([a-zA-Z\/%]+)?/);
+    if (numberMatch) {
+      const value = parseFloat(numberMatch[1]);
+      const unit = numberMatch[2] || '';
+      return {
+        value: isNaN(value) ? description : value,
+        unit,
+        referenceRange: '-', // Would need to be extracted from description or separate field
+      };
+    }
+
+    return { value: description, unit: '', referenceRange: '-' };
+  };
+
+  // Helper function to map exam data to TestResult
+  const mapExamToTestResult = (exam: any, appointmentDate: string): TestResult => {
+    const status = getExamStatus(exam);
+    const parsed = parseExamDescription(exam.description || '');
+    
+    return {
+      id: String(exam.id),
+      testName: exam.exam_type || 'Exame',
+      category: 'Exames',
+      value: parsed.value,
+      unit: parsed.unit,
+      referenceRange: parsed.referenceRange,
+      status,
+      date: exam.completed_date || exam.requested_date || appointmentDate,
+      provider: 'Clínica',
+      notes: exam.description || exam.reason || undefined,
+      critical: status === 'critical',
+      trend: undefined, // Would need historical data to calculate
+      previousValue: undefined,
+      previousDate: undefined,
+    };
+  };
 
   useEffect(() => {
     const load = async () => {
-      const history = await api.get<any[]>(`/api/clinical/me/history`);
-      const out: LabReport[] = [];
-      history.forEach(item => {
-        const results: TestResult[] = [];
-        item.clinical_record?.exam_requests?.forEach((er: any) => {
-          results.push({
-            id: String(er.id),
-            testName: er.exam_type,
-            category: 'Exames',
-            value: '-',
-            unit: '',
-            referenceRange: '-',
-            status: er.completed ? 'normal' : 'borderline',
-            date: er.requested_date,
-            provider: 'Clínica',
-            notes: er.description || undefined,
-            critical: false,
-          });
+      try {
+        setLoading(true);
+        
+        // Fetch exam results from the dedicated endpoint
+        const examResults = await api.get<any[]>(`/api/patient/exam-results`);
+        
+        // Group exams by appointment date to create reports
+        const reportsMap = new Map<string, LabReport>();
+        
+        examResults.forEach((exam: any) => {
+          const appointmentDate = exam.appointment_date || exam.requested_date || new Date().toISOString();
+          const reportKey = appointmentDate.split('T')[0]; // Group by date
+          
+          if (!reportsMap.has(reportKey)) {
+            reportsMap.set(reportKey, {
+              id: `report-${reportKey}`,
+              reportDate: appointmentDate,
+              orderedBy: exam.doctor_name || 'Médico',
+              provider: 'Clínica',
+              results: [],
+              summary: undefined,
+              doctorNotes: undefined,
+              recommendations: undefined,
+              acknowledged: exam.status === 'available',
+              acknowledgedAt: exam.completed_date || undefined,
+            });
+          }
+          
+          const report = reportsMap.get(reportKey)!;
+          const testResult = mapExamToTestResult(exam, appointmentDate);
+          report.results.push(testResult);
         });
-        if (results.length > 0) {
-          out.push({
-            id: `apt-${item.appointment_id}`,
-            reportDate: item.appointment_date,
-            orderedBy: item.doctor_name,
-            provider: 'Clínica',
-            summary: `${results.length} exame(s) solicitados`,
-            doctorNotes: undefined,
-            recommendations: undefined,
-            acknowledged: true,
-            results,
-          });
-        }
-      });
-      setReports(out);
+        
+        // Convert map to array and set summary
+        const reportsArray: LabReport[] = Array.from(reportsMap.values()).map(report => ({
+          ...report,
+          summary: `${report.results.length} exame(s) - ${format(parseISO(report.reportDate), "dd/MM/yyyy", { locale: ptBR })}`,
+        }));
+        
+        // Sort by date (newest first)
+        reportsArray.sort((a, b) => parseISO(b.reportDate).getTime() - parseISO(a.reportDate).getTime());
+        
+        setReports(reportsArray);
+      } catch (error: any) {
+        console.error("Error loading exam results:", error);
+        toast.error("Erro ao carregar resultados de exames", {
+          description: error?.message || "Não foi possível carregar seus exames",
+        });
+        setReports([]);
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, []);
@@ -257,7 +343,7 @@ export default function TestResultsPage() {
   const getTrendChartData = (testName: string) => {
     const allResults: Array<{ date: string; value: number }> = [];
     
-    mockReports.forEach(report => {
+    reports.forEach(report => {
       report.results.forEach(result => {
         if (result.testName === testName && typeof result.value === 'number') {
           allResults.push({
@@ -316,7 +402,20 @@ export default function TestResultsPage() {
             </p>
           </div>
 
+          {/* Loading State */}
+          {loading && (
+            <Card className="border-l-4 border-l-blue-500 bg-white/80 backdrop-blur-sm">
+              <CardContent className="py-12 text-center">
+                <div className="p-4 bg-blue-100 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                  <TestTube className="h-10 w-10 text-blue-600 animate-pulse" />
+                </div>
+                <p className="text-gray-500 font-medium">Carregando resultados de exames...</p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Statistics Cards */}
+          {!loading && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <Card className="border-l-4 border-l-blue-500 hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -374,9 +473,10 @@ export default function TestResultsPage() {
               </CardContent>
             </Card>
           </div>
+          )}
 
           {/* Critical Results Alert */}
-          {criticalResults.length > 0 && (
+          {!loading && criticalResults.length > 0 && (
             <Alert className="border-l-4 border-l-red-500 bg-red-50/50 mb-6">
               <Bell className="h-5 w-5 text-red-600" />
               <AlertTitle className="text-red-900 font-semibold">
@@ -400,6 +500,7 @@ export default function TestResultsPage() {
           )}
 
           {/* Search and Filters */}
+          {!loading && (
           <Card className="border-l-4 border-l-blue-500 mb-6 bg-white/80 backdrop-blur-sm">
             <CardHeader>
               <div className="flex flex-col md:flex-row gap-4">
@@ -444,8 +545,10 @@ export default function TestResultsPage() {
               </div>
             </CardHeader>
           </Card>
+          )}
 
           {/* View Toggle */}
+          {!loading && (
           <div className="mb-4 flex items-center justify-between">
             <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'summary' | 'detailed')}>
               <TabsList>
@@ -453,14 +556,49 @@ export default function TestResultsPage() {
                 <TabsTrigger value="detailed">Detalhado</TabsTrigger>
               </TabsList>
             </Tabs>
-            <Button variant="outline" size="sm">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={async () => {
+                try {
+                  const examResults = await api.get<any[]>(`/api/patient/exam-results`);
+                  const dataStr = JSON.stringify(examResults, null, 2);
+                  const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                  const url = URL.createObjectURL(dataBlob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `resultados_exames_${format(new Date(), 'yyyy-MM-dd')}.json`;
+                  link.click();
+                  URL.revokeObjectURL(url);
+                  toast.success('Resultados exportados com sucesso!');
+                } catch (error: any) {
+                  toast.error('Erro ao exportar resultados', {
+                    description: error?.message || 'Não foi possível exportar os resultados',
+                  });
+                }
+              }}
+            >
               <Download className="h-4 w-4 mr-2" />
               Exportar Todos
             </Button>
           </div>
+          )}
+
+          {/* Empty State */}
+          {!loading && reports.length === 0 && (
+            <Card className="border-l-4 border-l-blue-500 bg-white/80 backdrop-blur-sm">
+              <CardContent className="py-12 text-center">
+                <div className="p-4 bg-blue-100 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                  <TestTube className="h-10 w-10 text-blue-600" />
+                </div>
+                <p className="text-gray-500 font-medium mb-2">Nenhum resultado de exame encontrado</p>
+                <p className="text-sm text-gray-400">Seus resultados de exames aparecerão aqui quando estiverem disponíveis.</p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Summary View */}
-          {viewMode === 'summary' && (
+          {!loading && viewMode === 'summary' && (
             <div className="space-y-6">
               {/* Abnormal Results Summary */}
               {abnormalResults.length > 0 && (
@@ -672,7 +810,7 @@ export default function TestResultsPage() {
           )}
 
           {/* Detailed View */}
-          {viewMode === 'detailed' && (
+          {!loading && viewMode === 'detailed' && (
             <div className="space-y-6">
               {filteredReports.map((report) => (
                 <Card key={report.id} className="border-l-4 border-l-blue-500 bg-white/80 backdrop-blur-sm">
@@ -698,14 +836,60 @@ export default function TestResultsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              // Generate a simple text report for download
+                              const reportText = `
+RELATÓRIO DE EXAMES
+
+Data: ${format(parseISO(report.reportDate), "dd/MM/yyyy", { locale: ptBR })}
+Solicitado por: ${report.orderedBy}
+Laboratório: ${report.provider}
+
+RESULTADOS:
+${report.results.map(r => `
+${r.testName}
+  Resultado: ${r.value} ${r.unit}
+  Referência: ${r.referenceRange} ${r.unit}
+  Status: ${statusConfig[r.status].label}
+${r.notes ? `  Observações: ${r.notes}` : ''}
+`).join('\n')}
+                              `.trim();
+                              
+                              const blob = new Blob([reportText], { type: 'text/plain' });
+                              const url = URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.href = url;
+                              link.download = `relatorio_exames_${format(parseISO(report.reportDate), 'yyyy-MM-dd', { locale: ptBR })}.txt`;
+                              link.click();
+                              URL.revokeObjectURL(url);
+                              toast.success('Relatório baixado com sucesso!');
+                            } catch (error: any) {
+                              toast.error('Erro ao baixar relatório', {
+                                description: error?.message || 'Não foi possível baixar o relatório',
+                              });
+                            }
+                          }}
+                        >
                           <FileDown className="h-4 w-4 mr-2" />
                           PDF
                         </Button>
                         {!report.acknowledged && (
                           <Button
                             size="sm"
-                            onClick={() => acknowledgeReport(report.id)}
+                            onClick={() => {
+                              acknowledgeReport(report.id);
+                              // Update local state
+                              setReports(prev => prev.map(r => 
+                                r.id === report.id 
+                                  ? { ...r, acknowledged: true, acknowledgedAt: new Date().toISOString() }
+                                  : r
+                              ));
+                              toast.success('Leitura confirmada!');
+                            }}
                           >
                             <CheckCircle2 className="h-4 w-4 mr-2" />
                             Confirmar Leitura
@@ -806,7 +990,43 @@ export default function TestResultsPage() {
                         <MessageCircle className="h-4 w-4 mr-2" />
                         Discutir com o Médico
                       </Button>
-                      <Button variant="outline" size="sm">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const reportText = `
+RELATÓRIO DE EXAMES
+
+Data: ${format(parseISO(report.reportDate), "dd/MM/yyyy", { locale: ptBR })}
+Solicitado por: ${report.orderedBy}
+Laboratório: ${report.provider}
+
+RESULTADOS:
+${report.results.map(r => `
+${r.testName}
+  Resultado: ${r.value} ${r.unit}
+  Referência: ${r.referenceRange} ${r.unit}
+  Status: ${statusConfig[r.status].label}
+${r.notes ? `  Observações: ${r.notes}` : ''}
+`).join('\n')}
+                            `.trim();
+                            
+                            const blob = new Blob([reportText], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `relatorio_exames_${format(parseISO(report.reportDate), 'yyyy-MM-dd', { locale: ptBR })}.txt`;
+                            link.click();
+                            URL.revokeObjectURL(url);
+                            toast.success('Relatório baixado com sucesso!');
+                          } catch (error: any) {
+                            toast.error('Erro ao baixar relatório', {
+                              description: error?.message || 'Não foi possível baixar o relatório',
+                            });
+                          }
+                        }}
+                      >
                         <Download className="h-4 w-4 mr-2" />
                         Baixar PDF
                       </Button>
