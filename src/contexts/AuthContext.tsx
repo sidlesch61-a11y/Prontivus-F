@@ -47,8 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Skip verification on public routes (e.g., login)
-        if (pathname === '/login' || pathname === '/portal/login') {
+        // Skip verification on public routes (e.g., login, home page)
+        if (pathname === '/' || pathname === '/login' || pathname === '/portal/login') {
           setIsLoading(false);
           hasInitializedRef.current = true;
           return;
@@ -116,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               clearAuthData();
               setUser(null);
               verificationAttemptsRef.current = 0; // Reset counter
-              if (pathname !== '/login' && pathname !== '/portal/login') {
+              if (pathname !== '/' && pathname !== '/login' && pathname !== '/portal/login') {
                 router.push('/login');
               }
             } else {
@@ -126,8 +126,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             verificationAttemptsRef.current = 0; // Reset on success
           }
-        } else if (!storedUser && pathname !== '/login' && pathname !== '/portal/login') {
-          // No user found and not on login page - redirect to login
+        } else if (!storedUser && pathname !== '/' && pathname !== '/login' && pathname !== '/portal/login') {
+          // No user found and not on public pages - redirect to login
           router.push('/login');
         }
       } catch (error) {
