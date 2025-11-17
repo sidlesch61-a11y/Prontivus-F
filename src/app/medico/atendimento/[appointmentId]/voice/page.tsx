@@ -94,7 +94,7 @@ export default function VoiceDocumentationPage() {
       } catch (error) {
         console.error('Error loading appointment:', error);
         toast.error('Erro ao carregar consulta');
-        router.back();
+        router.push('/medico/atendimento/fila');
       } finally {
         setLoading(false);
       }
@@ -154,7 +154,7 @@ export default function VoiceDocumentationPage() {
       <div className="container mx-auto p-6">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Consulta não encontrada</h1>
-          <Button onClick={() => router.back()}>
+          <Button onClick={() => router.push('/medico/atendimento/fila')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
           </Button>
@@ -203,7 +203,7 @@ export default function VoiceDocumentationPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.back()}
+            onClick={() => router.push(`/medico/atendimento/${appointmentId}`)}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
@@ -376,3 +376,4 @@ export default function VoiceDocumentationPage() {
     </div>
   );
 }
+

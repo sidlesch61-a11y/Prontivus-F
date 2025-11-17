@@ -116,6 +116,11 @@ export interface Appointment {
   updated_at?: string;
   patient_name?: string;
   doctor_name?: string;
+  checked_in_at?: string;
+  started_at?: string;
+  completed_at?: string;
+  cancelled_at?: string;
+  cancellation_reason?: string;
 }
 
 export interface AppointmentCreate {
