@@ -2,7 +2,7 @@
 
 /* eslint-disable react/forbid-dom-props */
 import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ArrowRight, Play, ShieldCheck, Lock, CheckCircle2, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MedicalPattern } from "@/components/assets";
@@ -21,7 +21,6 @@ interface HeroSectionProps {
 }
 
 export function HeroSection({ className }: HeroSectionProps) {
-  const router = useRouter();
   const [videoModalOpen, setVideoModalOpen] = useState(false);
 
   const trustIndicators = [
@@ -66,7 +65,7 @@ export function HeroSection({ className }: HeroSectionProps) {
             <div className="flex flex-col sm:flex-row gap-4">
               <Button
                 size="lg"
-                onClick={() => router.push("/login")}
+                asChild
                 className={cn(
                   "bg-white text-[#0F4C75] hover:bg-white/90",
                   "text-lg px-8 py-6 h-auto font-semibold",
@@ -74,8 +73,10 @@ export function HeroSection({ className }: HeroSectionProps) {
                   "hover:scale-105 active:scale-95"
                 )}
               >
-                Comece grátis
-                <ArrowRight className="ml-2 h-5 w-5" />
+                <Link href="/login">
+                  Comece grátis
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
               </Button>
 
               <Dialog open={videoModalOpen} onOpenChange={setVideoModalOpen}>

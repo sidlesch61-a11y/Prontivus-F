@@ -280,6 +280,7 @@ export default function LandingPage() {
                           ))}
                         </ul>
                         <Button
+                          asChild
                           className={cn(
                             "w-full transition-all duration-300",
                             isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5",
@@ -288,13 +289,14 @@ export default function LandingPage() {
                               : "border-2 border-[#0F4C75] text-[#0F4C75] hover:bg-[#0F4C75]/5"
                           )}
                           variant={plan.popular ? "default" : "outline"}
-                          onClick={() => router.push("/login")}
                           style={{
                             transitionDelay: `${900 + index * 100 + plan.features.length * 50}ms`,
                           }}
                         >
-                          {plan.price === "Sob consulta" ? "Falar com vendas" : "Começar agora"}
-                          {plan.price !== "Sob consulta" && <ArrowRight className="ml-2 h-4 w-4" />}
+                          <Link href="/login">
+                            {plan.price === "Sob consulta" ? "Falar com vendas" : "Começar agora"}
+                            {plan.price !== "Sob consulta" && <ArrowRight className="ml-2 h-4 w-4" />}
+                          </Link>
                         </Button>
                       </CardContent>
                     </Card>

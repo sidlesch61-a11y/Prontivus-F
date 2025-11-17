@@ -189,24 +189,26 @@ export function LandingHeader({ className }: HeaderProps) {
           <div className="hidden lg:flex items-center space-x-3">
             <Button
               variant="ghost"
-              onClick={() => router.push("/login")}
+              asChild
               className={cn(
                 "text-[#0F4C75] hover:text-[#1B9AAA] hover:bg-[#1B9AAA]/5",
                 "transition-all duration-200 font-medium"
               )}
             >
-              Entrar
+              <Link href="/login">Entrar</Link>
             </Button>
             <Button
-              onClick={() => router.push("/login")}
+              asChild
               className={cn(
                 "bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white",
                 "shadow-md hover:shadow-lg transition-all duration-200",
                 "font-semibold px-6"
               )}
             >
-              Começar
-              <ArrowRight className="ml-2 h-4 w-4" />
+              <Link href="/login">
+                Começar
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
             </Button>
           </div>
 
@@ -278,25 +280,23 @@ export function LandingHeader({ className }: HeaderProps) {
                   <SheetClose asChild>
                     <Button
                       variant="outline"
+                      asChild
                       className="w-full border-2 border-[#0F4C75] text-[#0F4C75] hover:bg-[#0F4C75]/5"
-                      onClick={() => {
-                        router.push("/login");
-                        setMobileMenuOpen(false);
-                      }}
                     >
-                      Entrar
+                      <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                        Entrar
+                      </Link>
                     </Button>
                   </SheetClose>
                   <SheetClose asChild>
                     <Button
+                      asChild
                       className="w-full bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white font-semibold"
-                      onClick={() => {
-                        router.push("/login");
-                        setMobileMenuOpen(false);
-                      }}
                     >
-                      Começar
-                      <ArrowRight className="ml-2 h-4 w-4" />
+                      <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                        Começar
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
                     </Button>
                   </SheetClose>
                 </div>

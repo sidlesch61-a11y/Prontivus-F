@@ -59,6 +59,11 @@ const PUBLIC_ROUTES = [
  * Check if route is public
  */
 function isPublicRoute(pathname: string): boolean {
+  // Exact match for root
+  if (pathname === '/') {
+    return true;
+  }
+  // Check if pathname matches any public route exactly or starts with it
   return PUBLIC_ROUTES.some(route => 
     pathname === route || pathname.startsWith(route + '/')
   );

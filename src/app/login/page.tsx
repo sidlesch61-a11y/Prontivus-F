@@ -16,8 +16,9 @@ function LoginPageContent() {
 
   useEffect(() => {
     // If user is already authenticated, redirect them to their intended destination
+    // Only redirect if we're not navigating away from this page
     const token = localStorage.getItem('prontivus_access_token');
-    if (token) {
+    if (token && redirectTo && redirectTo !== '/') {
       router.push(redirectTo);
     }
   }, [router, redirectTo]);
@@ -68,7 +69,19 @@ function LoginPageContent() {
         {/* Logo centralizado na tela - above buttons but clickable */}
         <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
           <div className="text-center relative">
-            <Link href="/" className="block cursor-pointer hover:opacity-90 transition-opacity pointer-events-auto">
+            <Link 
+              href="/" 
+              className="block cursor-pointer hover:opacity-90 transition-opacity pointer-events-auto"
+              onClick={(e) => {
+                // Prevent event bubbling to buttons below
+                e.stopPropagation();
+                // Clear any redirect parameter when going to home
+                if (searchParams.get('redirect')) {
+                  e.preventDefault();
+                  router.push('/');
+                }
+              }}
+            >
               <div className="mx-auto flex items-center justify-center w-40 h-40 rounded-full bg-white/95 shadow-xl ring-2 ring-[#0F4C75]/20 relative overflow-visible star-trail backdrop-blur-sm">
                 <Image
                   src="/Logo/Sublogo PNG Transparente.png"
@@ -86,7 +99,14 @@ function LoginPageContent() {
         {/* Metade Paciente */}
         <button
           className="group relative overflow-hidden w-full h-full flex flex-col items-center justify-center p-10 bg-white/70 hover:bg-white transition-colors cursor-pointer"
-          onClick={handlePortalLogin}
+          onClick={(e) => {
+            // Don't trigger if clicking on logo area
+            const target = e.target as HTMLElement;
+            if (target.closest('a[href="/"]')) {
+              return;
+            }
+            handlePortalLogin();
+          }}
           aria-label="Entrar como Paciente"
         >
           {/* Background image */}
@@ -113,7 +133,14 @@ function LoginPageContent() {
         {/* Metade Equipe */}
         <button
           className="group relative overflow-hidden w-full h-full flex flex-col items-center justify-center p-10 bg-white/70 hover:bg-white transition-colors cursor-pointer"
-          onClick={handleDashboardLogin}
+          onClick={(e) => {
+            // Don't trigger if clicking on logo area
+            const target = e.target as HTMLElement;
+            if (target.closest('a[href="/"]')) {
+              return;
+            }
+            handleDashboardLogin();
+          }}
           aria-label="Entrar como Equipe"
         >
           {/* Background image */}

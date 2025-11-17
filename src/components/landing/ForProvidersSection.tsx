@@ -2,7 +2,7 @@
 
 /* eslint-disable react/forbid-dom-props */
 import React from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   UsersRound,
   Video,
@@ -31,7 +31,6 @@ interface ForProvidersSectionProps {
 }
 
 export function ForProvidersSection({ className }: ForProvidersSectionProps) {
-  const router = useRouter();
   const [showContactForm, setShowContactForm] = React.useState(false);
   const [contactFormData, setContactFormData] = React.useState({
     name: "",
@@ -219,11 +218,13 @@ export function ForProvidersSection({ className }: ForProvidersSectionProps) {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
               <Button
                 size="lg"
+                asChild
                 className="bg-[#0F4C75] hover:bg-[#0F4C75]/90 text-white px-8 py-6 h-auto text-lg font-semibold"
-                onClick={() => router.push("/login")}
               >
-                <CalendarDays className="mr-2 h-5 w-5" />
-                Agendar demonstração
+                <Link href="/login">
+                  <CalendarDays className="mr-2 h-5 w-5" />
+                  Agendar demonstração
+                </Link>
               </Button>
               <Button
                 size="lg"
