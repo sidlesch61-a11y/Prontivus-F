@@ -123,7 +123,18 @@ export default function AdminClinicsPage() {
         max_users: 10,
         active_modules: [],
       });
-      toast.success("Clínica criada com sucesso");
+      
+      // Check if admin user was created
+      if ((newClinic as any).admin_user) {
+        const adminUser = (newClinic as any).admin_user;
+        toast.success("Clínica criada com sucesso", {
+          description: `Usuário AdminClinica criado automaticamente. Username: ${adminUser.username}, Email: ${adminUser.email}, Senha: ${adminUser.password}`,
+          duration: 10000,
+        });
+      } else {
+        toast.success("Clínica criada com sucesso");
+      }
+      
       await loadData();
     } catch (error: any) {
       console.error("Failed to create clinic:", error);

@@ -291,8 +291,19 @@ export default function ClinicaPage() {
         await api.put(`/api/v1/admin/clinics/${editingClinic.id}`, clinicData);
         toast.success("Clínica atualizada com sucesso!");
       } else {
-        await api.post("/api/v1/admin/clinics", clinicData);
-        toast.success("Clínica cadastrada com sucesso!");
+        const response = await api.post("/api/v1/admin/clinics", clinicData);
+        const createdClinic = response.data;
+        
+        // Check if admin user was created
+        if (createdClinic.admin_user) {
+          const adminUser = createdClinic.admin_user;
+          toast.success("Clínica cadastrada com sucesso!", {
+            description: `Usuário AdminClinica criado automaticamente. Username: ${adminUser.username}, Email: ${adminUser.email}, Senha: ${adminUser.password}`,
+            duration: 10000, // Show for 10 seconds
+          });
+        } else {
+          toast.success("Clínica cadastrada com sucesso!");
+        }
       }
 
       setShowForm(false);
