@@ -171,7 +171,7 @@ function LoginForm() {
                 className="h-36 w-auto mx-auto"
               />
             </Link>
-            <p className="text-gray-600">Welcome back! Please enter your details</p>
+            <p className="text-gray-600">Bem-vindo de volta! Por favor, insira suas credenciais</p>
           </div>
 
           {/* Login Card */}
@@ -202,7 +202,7 @@ function LoginForm() {
 
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-gray-700 font-medium">
-                    Password
+                    Senha
                   </Label>
                   <div className="relative">
                     <Input
@@ -234,7 +234,7 @@ function LoginForm() {
                     href="/forgot-password"
                     className="text-sm font-medium text-purple-600 hover:text-purple-700 transition-colors"
                   >
-                    forgot password?
+                    Esqueceu a senha?
                   </Link>
                 </div>
 
@@ -249,7 +249,7 @@ function LoginForm() {
                       Entrando...
                     </>
                   ) : (
-                    'Log in'
+                    'Entrar'
                   )}
                 </Button>
               </form>
@@ -260,7 +260,7 @@ function LoginForm() {
                   <div className="w-full border-t border-gray-300"></div>
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-gray-500">Or Continue With</span>
+                  <span className="px-2 bg-white text-gray-500">Ou continue com</span>
                 </div>
               </div>
 
@@ -307,12 +307,12 @@ function LoginForm() {
 
               <div className="mt-6 pt-6 border-t border-gray-200 text-center">
                 <p className="text-sm text-gray-600">
-                  Don't have account?{" "}
+                  Não tem uma conta?{" "}
                   <Link 
                     href="/register" 
                     className="font-semibold text-purple-600 hover:text-purple-700 transition-colors"
                   >
-                    Sign up
+                    Cadastre-se
                   </Link>
                 </p>
               </div>
