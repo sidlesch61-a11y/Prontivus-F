@@ -192,7 +192,16 @@ export default function IAPage() {
     try {
       const data = await api.get<AIConfig>(`/api/v1/ai-config?clinic_id=${selectedClinicId}`);
       setConfig(data);
-      setFormData(data);
+      // Ensure no null values for form inputs
+      setFormData({
+        ...data,
+        api_key: data.api_key ?? "",
+        base_url: data.base_url ?? "",
+        model: data.model ?? "gpt-4",
+        provider: data.provider ?? "openai",
+        max_tokens: data.max_tokens ?? 2000,
+        temperature: data.temperature ?? 0.7,
+      });
       setConnectionStatus("unknown");
     } catch (error: any) {
       console.error("Failed to load AI config:", error);
@@ -212,7 +221,7 @@ export default function IAPage() {
             description: "A clínica selecionada não possui uma licença. Crie uma licença primeiro.",
           });
           // Still set config to show warning in UI
-          setConfig({
+          const defaultConfig: AIConfig = {
             enabled: false,
             provider: "openai",
             api_key: "",
@@ -236,7 +245,9 @@ export default function IAPage() {
             tokens_remaining: null,
             ai_module_enabled: false,
             warning: "Clínica não possui licença",
-          });
+          };
+          setConfig(defaultConfig);
+          setFormData(defaultConfig);
         } else {
           toast.error("Acesso negado", {
             description: errorMsg || "Você precisa de permissões de SuperAdmin para acessar esta página.",
@@ -298,14 +309,56 @@ export default function IAPage() {
         `/api/v1/ai-config?clinic_id=${selectedClinicId}`,
         formData
       );
-      setConfig(result.config || formData);
+      const updatedConfig = result.config || formData;
+      setConfig(updatedConfig);
+      // Ensure no null values for form inputs
+      setFormData({
+        ...updatedConfig,
+        api_key: updatedConfig.api_key ?? "",
+        base_url: updatedConfig.base_url ?? "",
+        model: updatedConfig.model ?? "gpt-4",
+        provider: updatedConfig.provider ?? "openai",
+        max_tokens: updatedConfig.max_tokens ?? 2000,
+        temperature: updatedConfig.temperature ?? 0.7,
+      });
       setHasChanges(false);
-      toast.success("Configuração de IA salva com sucesso!");
+      
+      // Reload config to get updated values including token limits
+      await loadConfig();
+      
+      // Check if there's a warning in the response
+      if (result.config?.warning) {
+        toast.warning("Configuração salva", {
+          description: result.config.warning,
+        });
+      } else {
+        toast.success("Configuração de IA salva com sucesso!");
+      }
     } catch (error: any) {
       console.error("Failed to save AI config:", error);
-      toast.error("Erro ao salvar configuração de IA", {
-        description: error?.message || error?.detail || "Não foi possível salvar a configuração",
-      });
+      const errorMsg = error?.detail || error?.message || "";
+      if (error?.status === 403) {
+        if (errorMsg.includes("does not have a license")) {
+          toast.warning("Clínica sem licença", {
+            description: "A configuração foi salva, mas a clínica precisa de uma licença para usar a IA. Crie uma licença primeiro.",
+          });
+          // Still reload config to show updated state
+          await loadConfig();
+        } else if (errorMsg.includes("AI module is not enabled")) {
+          toast.warning("Módulo IA não habilitado", {
+            description: "A configuração foi salva, mas habilite o módulo 'Inteligência Artificial' na licença para usar a IA.",
+          });
+          await loadConfig();
+        } else {
+          toast.error("Acesso negado", {
+            description: errorMsg || "Você não tem permissão para salvar esta configuração.",
+          });
+        }
+      } else {
+        toast.error("Erro ao salvar configuração de IA", {
+          description: errorMsg || "Não foi possível salvar a configuração",
+        });
+      }
     } finally {
       setSaving(false);
     }
@@ -609,7 +662,7 @@ export default function IAPage() {
                       <div>
                         <Label htmlFor="ai-provider">Provedor de IA *</Label>
                         <Select
-                          value={formData.provider}
+                          value={formData.provider ?? "openai"}
                           onValueChange={(value) => {
                             setFormData(prev => ({
                               ...prev,
@@ -636,7 +689,7 @@ export default function IAPage() {
                       <div>
                         <Label htmlFor="ai-model">Modelo *</Label>
                         <Select
-                          value={formData.model}
+                          value={formData.model ?? "gpt-4"}
                           onValueChange={(value) =>
                             setFormData(prev => ({ ...prev, model: value }))
                           }
@@ -661,7 +714,7 @@ export default function IAPage() {
                         type="password"
                         placeholder="sk-..."
                         className="mt-1"
-                        value={formData.api_key}
+                        value={formData.api_key ?? ""}
                         onChange={(e) =>
                           setFormData(prev => ({ ...prev, api_key: e.target.value }))
                         }
@@ -676,7 +729,7 @@ export default function IAPage() {
                         id="ai-base-url"
                         placeholder="https://api.openai.com/v1"
                         className="mt-1"
-                        value={formData.base_url}
+                        value={formData.base_url ?? ""}
                         onChange={(e) =>
                           setFormData(prev => ({ ...prev, base_url: e.target.value }))
                         }
@@ -694,7 +747,7 @@ export default function IAPage() {
                           min="1"
                           max="8000"
                           className="mt-1"
-                          value={formData.max_tokens}
+                          value={formData.max_tokens ?? 2000}
                           onChange={(e) =>
                             setFormData(prev => ({
                               ...prev,
@@ -713,7 +766,7 @@ export default function IAPage() {
                           min="0"
                           max="1"
                           className="mt-1"
-                          value={formData.temperature}
+                          value={formData.temperature ?? 0.7}
                           onChange={(e) =>
                             setFormData(prev => ({
                               ...prev,
