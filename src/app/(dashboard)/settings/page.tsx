@@ -786,7 +786,6 @@ export default function SettingsPage() {
                       id="emailNotifications"
                       checked={settings.notifications.email}
                       onCheckedChange={(checked) => handleSettingChange('notifications', 'email', checked)}
-                      className="data-[state=checked]:bg-blue-600"
                     />
                   </div>
                     </div>
@@ -806,7 +805,6 @@ export default function SettingsPage() {
                     <Switch
                       id="pushNotifications"
                       checked={settings.notifications.push}
-                      className="data-[state=checked]:bg-blue-600"
                         onCheckedChange={async (checked) => {
                           handleSettingChange('notifications', 'push', checked);
                           // If enabling, request permission and subscribe
@@ -867,7 +865,6 @@ export default function SettingsPage() {
                       id="smsNotifications"
                       checked={settings.notifications.sms}
                       onCheckedChange={(checked) => handleSettingChange('notifications', 'sms', checked)}
-                      className="data-[state=checked]:bg-blue-600"
                     />
                     </div>
                   </div>
@@ -1223,7 +1220,7 @@ export default function SettingsPage() {
                       id="showOnlineStatus"
                       checked={settings.privacy.showOnlineStatus}
                       onCheckedChange={(checked) => handleSettingChange('privacy', 'showOnlineStatus', checked)}
-                      className="data-[state=checked]:bg-green-600"
+                      className="data-[state=checked]:from-green-600 data-[state=checked]:to-emerald-600 data-[state=checked]:shadow-green-500/50"
                     />
                   </div>
                   <div className="flex items-center justify-between p-5 rounded-xl bg-gradient-to-r from-green-50/80 to-emerald-50/80 border border-green-200/50 hover:shadow-md transition-all duration-200">
@@ -1232,7 +1229,7 @@ export default function SettingsPage() {
                       id="allowDirectMessages"
                       checked={settings.privacy.allowDirectMessages}
                       onCheckedChange={(checked) => handleSettingChange('privacy', 'allowDirectMessages', checked)}
-                      className="data-[state=checked]:bg-green-600"
+                      className="data-[state=checked]:from-green-600 data-[state=checked]:to-emerald-600 data-[state=checked]:shadow-green-500/50"
                     />
                   </div>
                   <div className="flex items-center justify-between p-5 rounded-xl bg-gradient-to-r from-green-50/80 to-emerald-50/80 border border-green-200/50 hover:shadow-md transition-all duration-200">
@@ -1241,7 +1238,7 @@ export default function SettingsPage() {
                       id="dataSharing"
                       checked={settings.privacy.dataSharing}
                       onCheckedChange={(checked) => handleSettingChange('privacy', 'dataSharing', checked)}
-                      className="data-[state=checked]:bg-green-600"
+                      className="data-[state=checked]:from-green-600 data-[state=checked]:to-emerald-600 data-[state=checked]:shadow-green-500/50"
                     />
                   </div>
                 </div>
@@ -1473,7 +1470,7 @@ export default function SettingsPage() {
                   <Switch
                     id="twoFactorAuth"
                     checked={settings.security.twoFactorAuth}
-                    className="data-[state=checked]:bg-red-600"
+                    className="data-[state=checked]:from-red-600 data-[state=checked]:to-rose-600 data-[state=checked]:shadow-red-500/50"
                     onCheckedChange={async (checked) => {
                       if (checked) {
                         // Enable 2FA - start setup process
@@ -1527,7 +1524,7 @@ export default function SettingsPage() {
                     id="loginAlerts"
                     checked={settings.security.loginAlerts}
                     onCheckedChange={(checked) => handleSettingChange('security', 'loginAlerts', checked)}
-                    className="data-[state=checked]:bg-red-600"
+                    className="data-[state=checked]:from-red-600 data-[state=checked]:to-rose-600 data-[state=checked]:shadow-red-500/50"
                   />
                 </div>
               </div>
