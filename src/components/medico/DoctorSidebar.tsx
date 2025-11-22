@@ -21,6 +21,7 @@ import {
   UserRound,
   Clock,
   Wallet,
+  MessageCircle,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
@@ -47,6 +48,11 @@ const DOCTOR_MENU = [
         title: "Agendamentos",
         icon: CalendarDays,
         url: "/medico/agendamentos",
+      },
+      {
+        title: "Mensagens",
+        icon: MessageCircle,
+        url: "/medico/mensagens",
       },
       {
         title: "Histórico dos Prontuários",

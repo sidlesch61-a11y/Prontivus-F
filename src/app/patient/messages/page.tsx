@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +50,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { uploadFiles } from "@/lib/file-upload";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ptBR } from "date-fns/locale";
@@ -124,6 +125,126 @@ export default function MessagesPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [stats, setStats] = useState({ total: 0, unread: 0, urgent: 0 });
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Real-time message handlers
+  const handleNewMessage = useCallback((message: any) => {
+    // Only add message if it's for the current thread
+    if (selectedThreadId && message.thread_id === selectedThreadId) {
+      const mappedMessage: Message = {
+        id: message.id,
+        senderId: message.sender_id,
+        senderName: message.sender_type === "patient" ? "Você" : currentThread?.provider_name || "Médico",
+        senderType: message.sender_type,
+        content: message.content || "",
+        timestamp: parseISO(message.created_at),
+        read: message.status === "read",
+        urgent: currentThread?.is_urgent,
+        topic: currentThread?.topic,
+        attachments: message.attachments?.map((att: any, idx: number) => ({
+          id: `${message.id}-${idx}`,
+          name: att.name,
+          type: att.type === "pdf" ? "pdf" : att.type === "image" ? "image" : "document",
+          url: att.url,
+          size: att.size || 0,
+        })),
+        medicalContext: message.medical_context ? {
+          type: message.medical_context.type as any,
+          referenceId: message.medical_context.reference_id,
+        } : undefined,
+      };
+      
+      setCurrentMessages(prev => {
+        // Avoid duplicates
+        if (prev.some(m => m.id === message.id)) {
+          return prev;
+        }
+        return [...prev, mappedMessage];
+      });
+      
+      // Update thread in list
+      setThreads(prev => prev.map(t => {
+        if (t.id === message.thread_id) {
+          return {
+            ...t,
+            last_message_at: message.created_at,
+            last_message: message.content?.substring(0, 100),
+            unread_count: message.sender_type === "patient" ? t.unread_count : t.unread_count + 1,
+          };
+        }
+        return t;
+      }));
+      
+      // Update stats
+      if (message.sender_type !== "patient") {
+        setStats(prev => ({ ...prev, unread: prev.unread + 1 }));
+      }
+    } else {
+      // Message for a different thread - update thread list
+      setThreads(prev => prev.map(t => {
+        if (t.id === message.thread_id) {
+          return {
+            ...t,
+            last_message_at: message.created_at,
+            last_message: message.content?.substring(0, 100),
+            unread_count: message.sender_type === "patient" ? t.unread_count : t.unread_count + 1,
+          };
+        }
+        return t;
+      }));
+      
+      // Update stats
+      if (message.sender_type !== "patient") {
+        setStats(prev => ({ ...prev, unread: prev.unread + 1 }));
+      }
+    }
+  }, [selectedThreadId, currentThread]);
+
+  const handleThreadUpdate = useCallback((update: any) => {
+    // Update thread in list
+    setThreads(prev => prev.map(t => {
+      if (t.id === update.thread_id) {
+        return {
+          ...t,
+          ...update.thread,
+        };
+      }
+      return t;
+    }));
+    
+    // If current thread is updated, refresh it
+    if (selectedThreadId === update.thread_id && currentThread) {
+      setRefreshKey(prev => prev + 1);
+    }
+  }, [selectedThreadId, currentThread]);
+
+  const handleMessageRead = useCallback((threadId: number, messageId: number) => {
+    // Update message read status
+    if (selectedThreadId === threadId) {
+      setCurrentMessages(prev => prev.map(m => {
+        if (m.id === messageId) {
+          return { ...m, read: true };
+        }
+        return m;
+      }));
+    }
+  }, [selectedThreadId]);
+
+  // Set up real-time messaging
+  const { connected, subscribeToThread, unsubscribeFromThread } = useRealtimeMessages(
+    handleNewMessage,
+    handleThreadUpdate,
+    handleMessageRead
+  );
+
+  // Subscribe to thread when selected
+  useEffect(() => {
+    if (selectedThreadId && connected) {
+      subscribeToThread(selectedThreadId);
+      return () => {
+        unsubscribeFromThread(selectedThreadId);
+      };
+    }
+  }, [selectedThreadId, connected, subscribeToThread, unsubscribeFromThread]);
 
   // Load threads on mount and when refresh key changes
   useEffect(() => {
@@ -207,7 +328,7 @@ export default function MessagesPage() {
         urgent: thread.is_urgent,
         topic: thread.topic,
         attachments: msg.attachments?.map((att, idx) => ({
-          id: String(idx),
+          id: `${msg.id}-${idx}`,
           name: att.name,
           type: att.type === "pdf" ? "pdf" : att.type === "image" ? "image" : "document",
           url: att.url,
@@ -399,11 +520,22 @@ export default function MessagesPage() {
 
         <main className="flex-1 flex h-[calc(100vh-80px)]">
           {/* Conversation List Sidebar */}
-          <div className="w-full lg:w-80 border-r border-gray-200 bg-white flex flex-col">
+          <div className="w-full lg:w-80 border-r border-gray-200 bg-white flex flex-col h-full">
             {/* Header with Stats and New Thread Button */}
-            <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-teal-50">
+            <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-teal-50 flex-shrink-0">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-semibold text-gray-900">Mensagens</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-gray-900">Mensagens</h2>
+                  <div className="flex items-center gap-1">
+                    <div className={cn(
+                      "h-2 w-2 rounded-full",
+                      connected ? "bg-green-500" : "bg-gray-400"
+                    )} title={connected ? "Conectado em tempo real" : "Desconectado"} />
+                    <span className="text-xs text-gray-500">
+                      {connected ? "Online" : "Offline"}
+                    </span>
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -468,7 +600,7 @@ export default function MessagesPage() {
             </div>
 
             {/* Search Bar */}
-            <div className="p-4 border-b border-gray-200">
+            <div className="p-4 border-b border-gray-200 flex-shrink-0">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
@@ -481,7 +613,7 @@ export default function MessagesPage() {
             </div>
 
             {/* Conversation List */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto min-h-0">
               {loading ? (
                 <div className="p-4 text-center">
                   <RefreshCw className="h-5 w-5 text-gray-400 animate-spin mx-auto mb-2" />
@@ -583,11 +715,11 @@ export default function MessagesPage() {
           </div>
 
           {/* Message Thread */}
-          <div className="flex-1 flex flex-col bg-white">
+          <div className="flex-1 flex flex-col bg-white h-full">
             {currentThread ? (
               <>
                 {/* Header */}
-                <div className="p-4 border-b border-gray-200 bg-white sticky top-0 z-10">
+                <div className="p-4 border-b border-gray-200 bg-white sticky top-0 z-10 flex-shrink-0">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Avatar className="h-10 w-10">
@@ -635,7 +767,7 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Messages Area */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 min-h-0">
                   {currentMessages.length === 0 ? (
                     <div className="text-center py-12">
                       <MessageCircle className="h-16 w-16 text-gray-300 mx-auto mb-4" />
@@ -907,7 +1039,7 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Message Input Area */}
-                <div className="p-4 border-t border-gray-200 bg-white">
+                <div className="p-4 border-t border-gray-200 bg-white flex-shrink-0">
                   {/* Quick Responses */}
                   {showQuickResponses && (
                     <div className="mb-3 flex flex-wrap gap-2">
