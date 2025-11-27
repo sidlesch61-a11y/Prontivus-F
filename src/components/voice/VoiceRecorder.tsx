@@ -49,18 +49,85 @@ export function VoiceRecorder({
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+      // Check if mediaDevices API is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error('Seu navegador não suporta gravação de áudio. Use Chrome, Firefox ou Edge.');
+        return;
+      }
+
+      // Check if we're on HTTPS (required for getUserMedia in most browsers)
+      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        toast.error('Gravação de áudio requer conexão HTTPS. Por favor, use uma conexão segura.');
+        return;
+      }
+
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          }
+        });
+      } catch (mediaError: any) {
+        console.error('getUserMedia error:', mediaError);
+        
+        // Handle specific error types
+        if (mediaError.name === 'NotAllowedError' || mediaError.name === 'PermissionDeniedError') {
+          toast.error('Permissão de microfone negada. Por favor, permita o acesso ao microfone nas configurações do navegador.', {
+            duration: 5000,
+          });
+        } else if (mediaError.name === 'NotFoundError' || mediaError.name === 'DevicesNotFoundError') {
+          toast.error('Nenhum microfone encontrado. Verifique se há um microfone conectado e tente novamente.', {
+            duration: 5000,
+          });
+        } else if (mediaError.name === 'NotReadableError' || mediaError.name === 'TrackStartError') {
+          toast.error('O microfone está sendo usado por outro aplicativo. Feche outros aplicativos que possam estar usando o microfone.', {
+            duration: 5000,
+          });
+        } else if (mediaError.name === 'OverconstrainedError') {
+          toast.error('O microfone não suporta as configurações solicitadas. Tentando configurações alternativas...', {
+            duration: 3000,
+          });
+          // Try with simpler constraints
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (retryError: any) {
+            toast.error('Não foi possível acessar o microfone. Verifique as permissões e tente novamente.');
+            return;
+          }
+        } else {
+          toast.error(`Erro ao acessar microfone: ${mediaError.message || 'Erro desconhecido'}. Verifique as permissões.`, {
+            duration: 5000,
+          });
         }
-      });
+        return;
+      }
       
       streamRef.current = stream;
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
+      
+      // Check if MediaRecorder is supported
+      if (!window.MediaRecorder) {
+        toast.error('Seu navegador não suporta gravação de áudio. Use uma versão mais recente do navegador.');
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
+      // Try to find a supported mime type
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        // Try alternatives
+        const alternatives = [
+          'audio/webm',
+          'audio/ogg;codecs=opus',
+          'audio/mp4',
+          'audio/wav'
+        ];
+        mimeType = alternatives.find(type => MediaRecorder.isTypeSupported(type)) || '';
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -72,7 +139,7 @@ export function VoiceRecorder({
       };
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
         const audioUrl = URL.createObjectURL(audioBlob);
         setAudioBlob(audioBlob);
         setAudioUrl(audioUrl);
@@ -81,7 +148,7 @@ export function VoiceRecorder({
 
       mediaRecorder.onerror = (event) => {
         console.error('MediaRecorder error:', event);
-        toast.error('Erro na gravação de áudio');
+        toast.error('Erro na gravação de áudio. Tente novamente.');
         stopRecording();
       };
 
@@ -97,13 +164,7 @@ export function VoiceRecorder({
       toast.success('Gravação iniciada');
     } catch (error: any) {
       console.error('Error starting recording:', error);
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        toast.error('Permissão de microfone negada. Por favor, permita o acesso ao microfone nas configurações do navegador.');
-      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-        toast.error('Nenhum microfone encontrado. Verifique se há um microfone conectado.');
-      } else {
-        toast.error('Não foi possível acessar o microfone. Verifique as permissões.');
-      }
+      toast.error('Erro inesperado ao iniciar gravação. Tente novamente.');
     }
   };
 

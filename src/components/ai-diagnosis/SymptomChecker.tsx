@@ -31,10 +31,20 @@ export function SymptomChecker({ onDiagnosisUpdate }: SymptomCheckerProps) {
       const data = await api.get<{ success: boolean; symptoms: string[]; count: number }>(
         '/api/v1/ai/symptoms/database'
       );
-      setSuggestions(data.symptoms || []);
+      if (data && data.success) {
+        setSuggestions(data.symptoms || []);
+      } else {
+        console.warn('Symptoms database returned unsuccessful response:', data);
+        setSuggestions([]);
+      }
     } catch (error: any) {
       console.error('Failed to load symptoms:', error);
-      toast.error('Erro ao carregar sintomas comuns');
+      const errorMessage = error?.message || error?.detail || 'Erro desconhecido';
+      toast.error('Erro ao carregar sintomas comuns', {
+        description: errorMessage,
+      });
+      // Set empty suggestions as fallback
+      setSuggestions([]);
     } finally {
       setIsLoadingSuggestions(false);
     }

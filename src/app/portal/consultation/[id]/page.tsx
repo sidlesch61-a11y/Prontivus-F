@@ -90,11 +90,40 @@ export default function ConsultationPage() {
 
   const initializeWebRTC = async () => {
     try {
-      // Get user media
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+      // Check if mediaDevices API is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setError("Seu navegador não suporta vídeo/áudio. Use Chrome, Firefox ou Edge.");
+        return;
+      }
+
+      // Check if we're on HTTPS (required for getUserMedia in most browsers)
+      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        setError("Conexão segura (HTTPS) é necessária para vídeo/áudio. Por favor, use uma conexão segura.");
+        return;
+      }
+
+      let stream: MediaStream;
+      try {
+        // Get user media
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+      } catch (mediaError: any) {
+        console.error("Failed to access media devices:", mediaError);
+        
+        // Handle specific error types
+        if (mediaError.name === 'NotAllowedError' || mediaError.name === 'PermissionDeniedError') {
+          setError("Permissão de câmera/microfone negada. Por favor, permita o acesso nas configurações do navegador.");
+        } else if (mediaError.name === 'NotFoundError' || mediaError.name === 'DevicesNotFoundError') {
+          setError("Câmera ou microfone não encontrados. Verifique se os dispositivos estão conectados.");
+        } else if (mediaError.name === 'NotReadableError' || mediaError.name === 'TrackStartError') {
+          setError("Câmera ou microfone estão sendo usados por outro aplicativo. Feche outros aplicativos e tente novamente.");
+        } else {
+          setError(`Erro ao acessar câmera/microfone: ${mediaError.message || 'Erro desconhecido'}. Verifique as permissões.`);
+        }
+        return;
+      }
       
       localStreamRef.current = stream;
       if (localVideoRef.current) {
@@ -123,12 +152,12 @@ export default function ConsultationPage() {
       peer.on("error", (err) => {
         console.error("Peer error:", err);
         setConnectionStatus("Connection error");
-        setError("Failed to establish connection. Please try again.");
+        setError("Falha ao estabelecer conexão. Tente novamente.");
       });
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to initialize WebRTC:", err);
-      setError("Failed to access camera/microphone. Please check your permissions.");
+      setError("Erro inesperado ao inicializar vídeo/áudio. Tente novamente.");
     }
   };
 

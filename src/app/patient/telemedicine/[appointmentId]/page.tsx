@@ -187,15 +187,51 @@ export default function TelemedicinePage() {
   useEffect(() => {
     const checkMediaDevices = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        // Check if mediaDevices API is available
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          console.warn('MediaDevices API not available');
+          return;
+        }
+
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        } catch (mediaError: any) {
+          console.error('Error accessing media devices:', mediaError);
+          
+          // Handle specific errors gracefully
+          if (mediaError.name === 'NotFoundError' || mediaError.name === 'DevicesNotFoundError') {
+            // Device not found - set both to false
+            setPreparationChecks(prev => ({
+              ...prev,
+              camera: false,
+              microphone: false,
+            }));
+          } else if (mediaError.name === 'NotAllowedError' || mediaError.name === 'PermissionDeniedError') {
+            // Permission denied - set both to false
+            setPreparationChecks(prev => ({
+              ...prev,
+              camera: false,
+              microphone: false,
+            }));
+          }
+          return;
+        }
+
         setPreparationChecks(prev => ({
           ...prev,
           camera: !!stream.getVideoTracks()[0],
           microphone: !!stream.getAudioTracks()[0],
         }));
         stream.getTracks().forEach(track => track.stop());
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error checking media devices:', error);
+        // Set both to false on any error
+        setPreparationChecks(prev => ({
+          ...prev,
+          camera: false,
+          microphone: false,
+        }));
       }
     };
     checkMediaDevices();
