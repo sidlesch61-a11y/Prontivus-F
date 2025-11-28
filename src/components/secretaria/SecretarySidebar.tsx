@@ -13,6 +13,7 @@ import {
   LogOut,
   UserRound,
   ClipboardList,
+  Monitor,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
@@ -39,6 +40,11 @@ const SECRETARY_MENU = [
         title: "Agendamentos",
         icon: CalendarDays,
         url: "/secretaria/agendamentos",
+      },
+      {
+        title: "Painel de Chamadas",
+        icon: Monitor,
+        url: "/secretaria/painel",
       },
     ],
   },
