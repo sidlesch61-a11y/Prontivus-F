@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CalendarDays, Plus, Search, Filter, Clock, User, Stethoscope, CheckCircle2, XCircle, AlertCircle, RefreshCw, Edit, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, Plus, Search, Filter, Clock, User, Stethoscope, CheckCircle2, XCircle, AlertCircle, RefreshCw, Edit, Trash2, ChevronLeft, ChevronRight, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -320,6 +320,44 @@ export default function AgendamentosPage() {
     }
   };
 
+  // Get today's appointments for queue display
+  const todayAppointments = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    return filteredAppointments.filter(apt => {
+      const aptDate = parseISO(apt.scheduled_datetime);
+      return aptDate >= today && aptDate < tomorrow;
+    });
+  }, [filteredAppointments]);
+
+  // Get checked-in patients (queue)
+  const queuePatients = useMemo(() => {
+    return todayAppointments.filter(apt => {
+      const statusLower = apt.status?.toLowerCase() || "";
+      return statusLower === "checked_in" || statusLower === "in_consultation";
+    }).sort((a, b) => {
+      // Sort by status (in_consultation first), then by scheduled time
+      const aStatus = a.status?.toLowerCase() || "";
+      const bStatus = b.status?.toLowerCase() || "";
+      if (aStatus === "in_consultation" && bStatus !== "in_consultation") return -1;
+      if (bStatus === "in_consultation" && aStatus !== "in_consultation") return 1;
+      return parseISO(a.scheduled_datetime).getTime() - parseISO(b.scheduled_datetime).getTime();
+    });
+  }, [todayAppointments]);
+
+  // Get scheduled patients (can check in)
+  const scheduledPatients = useMemo(() => {
+    return todayAppointments.filter(apt => {
+      const statusLower = apt.status?.toLowerCase() || "";
+      return statusLower === "scheduled" || statusLower === "agendado" || statusLower === "confirmado";
+    }).sort((a, b) => {
+      return parseISO(a.scheduled_datetime).getTime() - parseISO(b.scheduled_datetime).getTime();
+    });
+  }, [todayAppointments]);
+
   const handleCreateAppointment = async () => {
     if (!formData.patient_id || !formData.doctor_id || !formData.scheduled_datetime) {
       toast.error("Preencha todos os campos obrigatórios");
@@ -425,6 +463,21 @@ export default function AgendamentosPage() {
       });
     } finally {
       setCanceling(false);
+    }
+  };
+
+  const handleCheckIn = async (appointmentId: number) => {
+    try {
+      await api.patch(`/api/appointments/${appointmentId}/status`, {
+        status: "checked_in",
+      });
+      toast.success("Check-in realizado com sucesso!");
+      await loadAppointments();
+    } catch (error: any) {
+      console.error("Failed to check in appointment:", error);
+      toast.error("Erro ao realizar check-in", {
+        description: error?.message || error?.detail || "Não foi possível realizar o check-in",
+      });
     }
   };
 
@@ -620,6 +673,125 @@ export default function AgendamentosPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Patient Queue and Scheduled Patients */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Patient Queue - Checked-in Patients */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-blue-600" />
+              Fila de Pacientes
+            </CardTitle>
+            <CardDescription>
+              Pacientes que realizaram check-in e aguardam consulta
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {queuePatients.length > 0 ? (
+              <div className="space-y-3">
+                {queuePatients.map((appointment) => {
+                  const appointmentDate = parseISO(appointment.scheduled_datetime);
+                  const time = format(appointmentDate, "HH:mm", { locale: ptBR });
+                  const isInConsultation = appointment.status?.toLowerCase() === "in_consultation";
+                  
+                  return (
+                    <div
+                      key={appointment.id}
+                      className={`flex items-center justify-between p-3 border rounded-lg ${
+                        isInConsultation ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                          isInConsultation ? 'bg-purple-100' : 'bg-blue-100'
+                        }`}>
+                          <User className={`h-6 w-6 ${
+                            isInConsultation ? 'text-purple-600' : 'text-blue-600'
+                          }`} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-semibold">{appointment.patient_name}</div>
+                          <div className="text-sm text-gray-600">{appointment.doctor_name}</div>
+                          <div className="text-xs text-gray-500">Horário: {time}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(appointment.status)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Clock className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p>Nenhum paciente na fila</p>
+                <p className="text-sm mt-1">Pacientes com check-in aparecerão aqui</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Scheduled Patients - Can Check In */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              Agendados para Hoje
+            </CardTitle>
+            <CardDescription>
+              Pacientes agendados que podem realizar check-in
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {scheduledPatients.length > 0 ? (
+              <div className="space-y-3">
+                {scheduledPatients.map((appointment) => {
+                  const appointmentDate = parseISO(appointment.scheduled_datetime);
+                  const time = format(appointmentDate, "HH:mm", { locale: ptBR });
+                  
+                  return (
+                    <div
+                      key={appointment.id}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                          <User className="h-6 w-6 text-green-600" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-semibold">{appointment.patient_name}</div>
+                          <div className="text-sm text-gray-600">{appointment.doctor_name}</div>
+                          <div className="text-xs text-gray-500">Horário: {time}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(appointment.status)}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleCheckIn(appointment.id)}
+                          className="border-green-600 text-green-600 hover:bg-green-50"
+                        >
+                          <LogIn className="h-4 w-4 mr-1" />
+                          Check-in
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p>Nenhum agendamento para hoje</p>
+                <p className="text-sm mt-1">Agendamentos de hoje aparecerão aqui</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Calendar View */}
       <Card>

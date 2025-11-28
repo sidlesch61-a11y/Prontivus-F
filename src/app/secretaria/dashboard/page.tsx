@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ClipboardList, CalendarDays, Users, Clock, CheckCircle2, AlertCircle, RefreshCw, Plus, Trash2 } from "lucide-react";
+import { ClipboardList, CalendarDays, Users, Clock, CheckCircle2, AlertCircle, RefreshCw, Plus, Trash2, LogIn, User } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -167,6 +167,33 @@ export default function SecretaryDashboard() {
     }
   };
 
+  const handleCheckIn = async (appointmentId: number) => {
+    try {
+      await api.patch(`/api/appointments/${appointmentId}/status`, {
+        status: "checked_in",
+      });
+      toast.success("Check-in realizado com sucesso!");
+      await loadDashboardData();
+    } catch (error: any) {
+      console.error("Failed to check in appointment:", error);
+      toast.error("Erro ao realizar check-in", {
+        description: error?.message || error?.detail || "Não foi possível realizar o check-in",
+      });
+    }
+  };
+
+  // Get checked-in patients (queue)
+  const queuePatients = dashboardData?.today_appointments.filter(apt => {
+    const statusLower = apt.status?.toLowerCase() || "";
+    return statusLower === "checked_in" || statusLower === "in_consultation";
+  }) || [];
+
+  // Get scheduled patients (can check in)
+  const scheduledPatients = dashboardData?.today_appointments.filter(apt => {
+    const statusLower = apt.status?.toLowerCase() || "";
+    return statusLower === "scheduled" || statusLower === "agendado" || statusLower === "confirmado";
+  }) || [];
+
   const getStatusBadge = (status: string) => {
     const statusLower = status?.toLowerCase() || "";
     switch (statusLower) {
@@ -315,18 +342,83 @@ export default function SecretaryDashboard() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Today's Appointments */}
+        {/* Patient Queue - Checked-in Patients */}
         <Card>
           <CardHeader>
-            <CardTitle>Agendamentos de Hoje</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-blue-600" />
+              Fila de Pacientes
+            </CardTitle>
             <CardDescription>
-              Consultas agendadas para hoje
+              Pacientes que realizaram check-in e aguardam consulta
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {dashboardData && dashboardData.today_appointments.length > 0 ? (
+            {queuePatients.length > 0 ? (
               <div className="space-y-3">
-                {dashboardData.today_appointments.map((appointment) => {
+                {queuePatients.map((appointment) => {
+                  const appointmentDate = parseISO(appointment.scheduled_datetime);
+                  const time = format(appointmentDate, "HH:mm", { locale: ptBR });
+                  const isInConsultation = appointment.status?.toLowerCase() === "in_consultation";
+                  
+                  return (
+                    <div
+                      key={appointment.id}
+                      className={`flex items-center justify-between p-3 border rounded-lg ${
+                        isInConsultation ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                          isInConsultation ? 'bg-purple-100' : 'bg-blue-100'
+                        }`}>
+                          <User className={`h-6 w-6 ${
+                            isInConsultation ? 'text-purple-600' : 'text-blue-600'
+                          }`} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-semibold">{appointment.patient_name}</div>
+                          <div className="text-sm text-gray-600">{appointment.doctor_name}</div>
+                          <div className="text-xs text-gray-500">Horário: {time}</div>
+                        </div>
+                      </div>
+                      <Badge className={getStatusBadge(appointment.status)}>
+                        {getStatusLabel(appointment.status)}
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Clock className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p>Nenhum paciente na fila</p>
+                <p className="text-sm mt-1">Pacientes com check-in aparecerão aqui</p>
+              </div>
+            )}
+            <Link href="/secretaria/agendamentos">
+              <button className="w-full mt-4 text-sm text-teal-600 hover:text-teal-700 font-medium">
+                Ver todos os agendamentos →
+              </button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        {/* Scheduled Patients - Can Check In */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              Agendados para Hoje
+            </CardTitle>
+            <CardDescription>
+              Consultas agendadas para hoje - Realize o check-in
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {scheduledPatients.length > 0 ? (
+              <div className="space-y-3">
+                {scheduledPatients.map((appointment) => {
                   const appointmentDate = parseISO(appointment.scheduled_datetime);
                   const time = format(appointmentDate, "HH:mm", { locale: ptBR });
                   
@@ -335,19 +427,30 @@ export default function SecretaryDashboard() {
                       key={appointment.id}
                       className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center">
-                          <Clock className="h-6 w-6 text-teal-600" />
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                          <User className="h-6 w-6 text-green-600" />
                         </div>
-                        <div>
+                        <div className="flex-1">
                           <div className="font-semibold">{appointment.patient_name}</div>
                           <div className="text-sm text-gray-600">{appointment.doctor_name}</div>
-                          <div className="text-xs text-gray-500">{time}</div>
+                          <div className="text-xs text-gray-500">Horário: {time}</div>
                         </div>
                       </div>
-                      <Badge className={getStatusBadge(appointment.status)}>
-                        {getStatusLabel(appointment.status)}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge className={getStatusBadge(appointment.status)}>
+                          {getStatusLabel(appointment.status)}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleCheckIn(appointment.id)}
+                          className="border-green-600 text-green-600 hover:bg-green-50"
+                        >
+                          <LogIn className="h-4 w-4 mr-1" />
+                          Check-in
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
