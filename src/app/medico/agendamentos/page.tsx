@@ -584,28 +584,58 @@ export default function AgendamentosPage() {
 
         {/* Calendar View */}
         <TabsContent value="calendar">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
+          <Card className="overflow-hidden border-0 shadow-xl">
+            <CardHeader className="bg-gradient-to-r from-green-50 via-emerald-50 to-green-50 border-b border-green-100">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <CardTitle>Calendário de Agendamentos</CardTitle>
-                  <CardDescription>
-                    Visualize seus agendamentos em formato de calendário
+                  <CardTitle className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <CalendarDays className="h-6 w-6 text-green-600" />
+                    Calendário de Agendamentos
+                  </CardTitle>
+                  <CardDescription className="text-gray-600 mt-1">
+                    Visualize e gerencie seus agendamentos em formato de calendário interativo
                   </CardDescription>
                 </div>
-                <Badge variant="outline" className="text-sm">
+                <Badge variant="outline" className="text-sm px-4 py-2 bg-white border-green-200 text-green-700 font-semibold shadow-sm">
                   {calendarEvents.length} {calendarEvents.length === 1 ? 'agendamento' : 'agendamentos'}
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-6">
               <MedicalCalendar
                 events={calendarEvents}
                 onSelectEvent={handleCalendarEventSelect}
                 onSelectSlot={handleCalendarSlotSelect}
                 defaultView="week"
-                className="rounded-lg border"
+                className="rounded-2xl"
               />
+              
+              {/* Legend */}
+              <div className="mt-6 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="text-sm font-semibold text-gray-700 mr-2">Legenda:</div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-gradient-to-r from-blue-500 to-blue-600 shadow-md"></div>
+                    <span className="text-sm text-gray-600">Consulta</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-gradient-to-r from-purple-500 to-purple-600 shadow-md"></div>
+                    <span className="text-sm text-gray-600">Procedimento</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-md"></div>
+                    <span className="text-sm text-gray-600">Retorno</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-gradient-to-r from-red-500 to-red-600 shadow-md"></div>
+                    <span className="text-sm text-gray-600">Emergência</span>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <div className="w-4 h-4 rounded-full bg-red-500 animate-pulse"></div>
+                    <span className="text-sm text-gray-600">Urgente</span>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
