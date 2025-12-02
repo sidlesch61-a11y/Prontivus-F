@@ -53,11 +53,6 @@ const SECRETARY_MENU = [
     icon: ClipboardList,
     items: [
       {
-        title: "Cadastros",
-        icon: ClipboardList,
-        url: "/secretaria/cadastros",
-      },
-      {
         title: "Pacientes",
         icon: Users,
         url: "/secretaria/cadastros/pacientes",
@@ -122,11 +117,8 @@ export function SecretarySidebar() {
   };
 
   const renderNavItem = (item: { title: string; icon: any; url: string }, groupName: string) => {
-    // For the main "Cadastros" page, only highlight when exactly on that route
-    // For sub-items, highlight when on that route or any sub-route
-    const active = item.url === "/secretaria/cadastros"
-      ? pathname === item.url
-      : pathname === item.url || pathname?.startsWith(item.url + '/');
+    // Highlight when on that route or any sub-route
+    const active = pathname === item.url || pathname?.startsWith(item.url + '/');
     const Icon = item.icon;
 
     return (
