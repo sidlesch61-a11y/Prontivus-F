@@ -3,7 +3,7 @@
 /* eslint-disable react/forbid-dom-props */
 import React, { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Play, ShieldCheck, Lock, CheckCircle2, Award } from "lucide-react";
+import { ArrowRight, Play, ShieldCheck, Lock, CheckCircle2, Award, HeartPulse } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MedicalPattern } from "@/components/assets";
 import { cn } from "@/lib/utils";
@@ -35,8 +35,10 @@ export function HeroSection({ className }: HeroSectionProps) {
         "relative min-h-[600px] lg:min-h-[700px] flex items-center overflow-hidden",
         "bg-gradient-to-br from-[#0F4C75] via-[#1B9AAA] to-[#0F4C75]",
         "pt-32 lg:pt-40",
+        "text-white",
         className
       )}
+      style={{ backgroundColor: '#0F4C75' }}
     >
       {/* Background Pattern */}
       <div className="absolute inset-0 opacity-10">
@@ -49,13 +51,13 @@ export function HeroSection({ className }: HeroSectionProps) {
           <div className="space-y-8 animate-fade-up">
             <div className="space-y-6">
               {/* Headline */}
-              <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold text-white leading-tight">
+              <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold text-white leading-tight drop-shadow-lg">
                 Gestão em Saúde
-                <span className="block text-[#16C79A]">Moderna e Simplificada</span>
+                <span className="block text-[#16C79A] drop-shadow-md">Moderna e Simplificada</span>
               </h1>
 
               {/* Subheadline */}
-              <p className="text-xl lg:text-2xl text-white/90 leading-relaxed max-w-2xl">
+              <p className="text-xl lg:text-2xl text-white leading-relaxed max-w-2xl drop-shadow-md">
                 O Prontivus conecta pacientes, médicos e clínicas em uma plataforma segura e inteligente,
                 projetada para a saúde moderna.
               </p>
@@ -130,17 +132,17 @@ export function HeroSection({ className }: HeroSectionProps) {
                 return (
                   <div
                     key={index}
-                    className="flex items-center gap-2 text-white/90 text-sm"
+                    className="flex items-center gap-2 text-white text-sm drop-shadow-sm"
                   >
-                    <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
+                    <div className="w-5 h-5 rounded-full bg-white/30 flex items-center justify-center shadow-sm">
                       <Icon className="h-3 w-3 text-white" />
                     </div>
                     <span className="font-medium">{indicator.label}</span>
                   </div>
                 );
               })}
-              <div className="flex items-center gap-2 text-white/90 text-sm">
-                <CheckCircle2 className="h-5 w-5 text-[#16C79A]" />
+              <div className="flex items-center gap-2 text-white text-sm drop-shadow-sm">
+                <CheckCircle2 className="h-5 w-5 text-[#16C79A] drop-shadow-sm" />
                 <span className="font-medium">Avaliação gratuita por 30 dias</span>
               </div>
             </div>

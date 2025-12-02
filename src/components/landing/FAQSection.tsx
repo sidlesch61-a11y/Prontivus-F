@@ -460,7 +460,7 @@ export function FAQSection({ className }: FAQSectionProps) {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-2 border-white/30 text-white hover:bg-white/10 px-8"
+                  className="border-2 border-white/30 text-black hover:bg-white/10 px-8 bg-white/90"
                   onClick={() => {
                     if (typeof window !== "undefined") {
                       window.location.href = "/help";

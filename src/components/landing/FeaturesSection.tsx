@@ -3,13 +3,16 @@
 import React from "react";
 import Image from "next/image";
 import {
-  FileText,
+  ClipboardCheck,
   Video,
   CalendarDays,
   Pill,
   CircleDollarSign,
-  ChartLine,
+  BarChart3,
   ArrowRight,
+  HeartPulse,
+  UsersRound,
+  FileText,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -30,11 +33,11 @@ interface FeaturesSectionProps {
 export function FeaturesSection({ className }: FeaturesSectionProps) {
   const features: Feature[] = [
     {
-      icon: FileText,
+      icon: ClipboardCheck,
       title: "Prontuário Eletrônico (PEP)",
       description: "Registros de pacientes seguros e acessíveis, com organização inteligente",
       iconColor: "text-[#0F4C75]",
-      iconBgColor: "bg-[#0F4C75]/10",
+      iconBgColor: "bg-blue-50",
       image: "/resource image/prontivus (7).jpg",
     },
     {
@@ -42,7 +45,7 @@ export function FeaturesSection({ className }: FeaturesSectionProps) {
       title: "Integração com Telemedicina",
       description: "Consultas virtuais com vídeo e mensagens seguras",
       iconColor: "text-[#1B9AAA]",
-      iconBgColor: "bg-[#1B9AAA]/10",
+      iconBgColor: "bg-cyan-50",
       image: "/resource image/prontivus (2).jpg",
     },
     {
@@ -50,31 +53,31 @@ export function FeaturesSection({ className }: FeaturesSectionProps) {
       title: "Gestão de Agendamentos",
       description: "Agenda inteligente com lembretes automáticos e lista de espera",
       iconColor: "text-[#16C79A]",
-      iconBgColor: "bg-[#16C79A]/10",
+      iconBgColor: "bg-emerald-50",
       image: "/resource image/prontivus (3).jpg",
     },
     {
       icon: Pill,
       title: "Gestão de Prescrições",
       description: "Prescrições digitais com integração a farmácias e renovação",
-      iconColor: "text-[#5D737E]",
-      iconBgColor: "bg-[#5D737E]/10",
+      iconColor: "text-purple-600",
+      iconBgColor: "bg-purple-50",
       image: "/resource image/prontivus (4).jpg",
     },
     {
       icon: CircleDollarSign,
       title: "Faturamento & Convênios",
       description: "Faturamento ágil com conformidade TISS e processamento de convênios",
-      iconColor: "text-[#0F4C75]",
-      iconBgColor: "bg-[#0F4C75]/10",
+      iconColor: "text-amber-600",
+      iconBgColor: "bg-amber-50",
       image: "/resource image/prontivus (5).jpg",
     },
     {
-      icon: ChartLine,
+      icon: BarChart3,
       title: "Análises & Relatórios",
       description: "Indicadores clínicos e financeiros para decisões baseadas em dados",
-      iconColor: "text-[#1B9AAA]",
-      iconBgColor: "bg-[#1B9AAA]/10",
+      iconColor: "text-indigo-600",
+      iconBgColor: "bg-indigo-50",
       image: "/resource image/prontivus (6).jpg",
     },
   ];
@@ -196,9 +199,9 @@ function FeatureCard({
               "w-16 h-16 rounded-2xl flex items-center justify-center",
               "transition-all duration-500",
               "group-hover:scale-110 group-hover:rotate-3",
-              "bg-white/90 backdrop-blur-md shadow-lg",
-              "group-hover:shadow-xl group-hover:shadow-blue-500/20",
-              "border-2 border-transparent group-hover:border-blue-200",
+              "shadow-lg",
+              "group-hover:shadow-xl",
+              "border-2 border-transparent group-hover:border-opacity-50",
               iconBgColor
             )}
           >

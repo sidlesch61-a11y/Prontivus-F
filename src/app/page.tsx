@@ -185,7 +185,7 @@ export default function LandingPage() {
 
 
   return (
-    <div className="min-h-screen bg-[#FAFBFC]">
+    <div className="min-h-screen bg-gradient-to-b from-white via-blue-50/20 to-white">
       {/* Header Navigation */}
       <LandingHeader />
 
@@ -216,10 +216,13 @@ export default function LandingPage() {
 
       {/* Pricing Section */}
       <AnimatedSection direction="up" delay={600}>
-        <section id="pricing" className="py-20 bg-[#FAFBFC]">
+        <section id="pricing" className="py-20 bg-gradient-to-b from-white via-blue-50/30 to-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-16">
-              <h2 className="text-4xl font-bold text-[#0F4C75] mb-4">Preços simples e transparentes</h2>
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100/50 rounded-full mb-6">
+                <span className="text-sm font-semibold text-blue-700">Preços</span>
+              </div>
+              <h2 className="text-4xl lg:text-5xl font-bold text-[#0F4C75] mb-4">Preços simples e transparentes</h2>
               <p className="text-xl text-[#5D737E] max-w-2xl mx-auto">
                 Escolha o plano que se adapta ao tamanho e às necessidades da sua clínica
               </p>
@@ -243,10 +246,12 @@ export default function LandingPage() {
                   >
                     <Card
                       className={cn(
-                        "medical-card border-2 relative h-full",
+                        "medical-card border-2 relative h-full transition-all duration-300",
+                        "bg-white/80 backdrop-blur-sm",
+                        "hover:shadow-2xl hover:-translate-y-2",
                         plan.popular
-                          ? "border-[#0F4C75] shadow-xl scale-105"
-                          : "border-gray-200"
+                          ? "border-[#0F4C75] shadow-xl scale-105 ring-2 ring-blue-100"
+                          : "border-gray-200 hover:border-blue-300"
                       )}
                     >
                       {plan.popular && (
