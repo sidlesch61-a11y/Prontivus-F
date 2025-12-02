@@ -1,9 +1,7 @@
 "use client";
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { usePatientCalling } from "@/hooks/usePatientCalling";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { Phone, Maximize2, Minimize2 } from "lucide-react";
+import { Phone, Settings, Maximize2, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import Image from "next/image";
@@ -17,27 +15,22 @@ export default function SecretariaPainelPage() {
   const { activeCalls, connected } = usePatientCalling();
   const { user } = useAuth();
   const [playedSounds, setPlayedSounds] = useState<Set<number>>(new Set());
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [clinicName, setClinicName] = useState<string>("Clínica");
+  const [clinicName, setClinicName] = useState<string>("CLÍNICA");
   const [lastCalls, setLastCalls] = useState<Array<{ patient_name: string; doctor_name: string; location: string; called_at: string }>>([]);
-  const [appointmentDetails, setAppointmentDetails] = useState<Record<number, { room?: string; location?: string }>>({});
+  const [appointmentDetails, setAppointmentDetails] = useState<Record<number, { room?: string; location?: string; appointment_type?: string }>>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Generate room code based on doctor_id (fallback)
   const getRoomCodeFallback = (doctorId: number): string => {
-    // Generate room code based on doctor_id (simple mapping)
-    // PC1, PC2, PC3 for doctors 1, 2, 3, etc.
     const roomNumber = ((doctorId - 1) % 5) + 1;
     return `PC${roomNumber}`;
   };
 
-  // Get room code for a call (with appointment details if available)
+  // Get room code for a call
   const getRoomCode = (doctorId: number, appointmentId?: number): string => {
-    // Try to get from cached appointment details
     if (appointmentId && appointmentDetails[appointmentId]?.room) {
       return appointmentDetails[appointmentId].room!;
     }
-    // Fallback to generated code
     return getRoomCodeFallback(doctorId);
   };
 
@@ -52,18 +45,21 @@ export default function SecretariaPainelPage() {
       for (const call of callsToFetch) {
         try {
           const appointment = await api.get<any>(`/api/v1/appointments/${call.appointment_id}`);
-          // Extract room/location from appointment_type or notes
-          // If appointment_type exists, use first 3 chars, otherwise generate from doctor_id
-          const room = appointment?.appointment_type 
-            ? appointment.appointment_type.toUpperCase().substring(0, 3)
-            : getRoomCodeFallback(call.doctor_id);
+          // Use full appointment_type if available, otherwise fallback to room code
+          const appointmentType = appointment?.appointment_type 
+            ? appointment.appointment_type.toUpperCase()
+            : null;
+          const room = appointmentType || getRoomCodeFallback(call.doctor_id);
           
           setAppointmentDetails(prev => ({
             ...prev,
-            [call.appointment_id]: { room, location: room }
+            [call.appointment_id]: { 
+              room: appointmentType || room, 
+              location: appointmentType || room,
+              appointment_type: appointmentType
+            }
           }));
         } catch (error) {
-          // If fetch fails, use generated room code
           const room = getRoomCodeFallback(call.doctor_id);
           setAppointmentDetails(prev => ({
             ...prev,
@@ -86,26 +82,14 @@ export default function SecretariaPainelPage() {
         const elem = document.documentElement;
         if (elem.requestFullscreen) {
           await elem.requestFullscreen();
-          setIsFullscreen(true);
         }
       } catch (err) {
         console.log("Fullscreen not available:", err);
       }
     };
 
-    // Auto-enter fullscreen after a short delay
     const timer = setTimeout(enterFullscreen, 1000);
     return () => clearTimeout(timer);
-  }, []);
-
-  // Handle fullscreen changes
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
   // Load clinic name
@@ -114,25 +98,20 @@ export default function SecretariaPainelPage() {
     const loadClinicInfo = async () => {
       try {
         if (clinicId) {
-          // Try to get clinic info from /me endpoint (for admin users)
           try {
             const clinic = await api.get<ClinicInfo>(`/api/v1/admin/clinics/me`);
             if (clinic?.name || clinic?.commercial_name) {
-              setClinicName(clinic.commercial_name || clinic.name || "Clínica");
+              setClinicName((clinic.commercial_name || clinic.name || "CLÍNICA").toUpperCase());
               return;
             }
           } catch (meError: any) {
-            // If /me fails (not admin), try alternative approach or use default
-            // The endpoint might not be accessible for all roles
             if (meError?.status !== 404 && meError?.status !== 403) {
               console.warn("Error loading clinic info:", meError);
             }
-            // Use default name - clinic name is optional for TV display
           }
         }
       } catch (error) {
-        // Silently fail - clinic name is optional for TV display
-        // Default "Clínica" will be used
+        // Silently fail
       }
     };
     loadClinicInfo();
@@ -146,7 +125,6 @@ export default function SecretariaPainelPage() {
         const exists = prev.some(c => c.patient_name === currentCall.patient_name && 
           new Date(c.called_at).getTime() === new Date(currentCall.called_at).getTime());
         if (!exists) {
-          // Get room code - use appointment details if available, otherwise generate
           const roomCode = currentCall.appointment_id && appointmentDetails[currentCall.appointment_id]?.room
             ? appointmentDetails[currentCall.appointment_id].room!
             : getRoomCodeFallback(currentCall.doctor_id);
@@ -178,20 +156,6 @@ export default function SecretariaPainelPage() {
     });
   }, [activeCalls, playedSounds]);
 
-  const toggleFullscreen = async () => {
-    try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
-        setIsFullscreen(true);
-      } else {
-        await document.exitFullscreen();
-        setIsFullscreen(false);
-      }
-    } catch (err) {
-      console.log("Fullscreen toggle failed:", err);
-    }
-  };
-
   // Get current active call (most recent "called" status)
   const currentCall = activeCalls
     .filter((call) => call.status === "called")
@@ -200,83 +164,155 @@ export default function SecretariaPainelPage() {
       .filter((call) => call.status !== "completed")
       .sort((a, b) => new Date(b.called_at).getTime() - new Date(a.called_at).getTime())[0];
 
+  // Get location text - format as "SALA DE [TYPE]" matching the image design
+  const getLocationText = (): string => {
+    if (!currentCall) return "";
+    
+    // Check if we have appointment_type from appointment details
+    if (currentCall.appointment_id && appointmentDetails[currentCall.appointment_id]?.appointment_type) {
+      const appointmentType = appointmentDetails[currentCall.appointment_id].appointment_type!;
+      
+      // If already formatted with "SALA DE", return as is
+      if (appointmentType.toUpperCase().includes("SALA DE") || appointmentType.toUpperCase().includes("CONSULTÓRIO")) {
+        return appointmentType.toUpperCase();
+      }
+      
+      // Format appointment type: convert underscores to spaces, capitalize properly
+      // Handle cases like "pré-consulta 1" or "PRE_CONSULTA_1"
+      let formattedType = appointmentType
+        .toLowerCase()
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (l) => l.toUpperCase())
+        .trim();
+      
+      // Return as "SALA DE [FORMATTED_TYPE]"
+      return `SALA DE ${formattedType.toUpperCase()}`;
+    }
+    
+    // Fallback: use room code if available
+    if (currentCall.appointment_id && appointmentDetails[currentCall.appointment_id]?.room) {
+      const room = appointmentDetails[currentCall.appointment_id].room!;
+      // If room is a simple code like "PC1", format as "SALA PC1"
+      if (room.match(/^[A-Z]{1,3}\d+$/)) {
+        return `SALA ${room}`;
+      }
+      // Otherwise format as "SALA DE [ROOM]"
+      return `SALA DE ${room.toUpperCase()}`;
+    }
+    
+    // Final fallback: generate room code
+    const roomCode = getRoomCode(currentCall.doctor_id, currentCall.appointment_id);
+    return roomCode ? `SALA ${roomCode}` : "CONSULTÓRIO";
+  };
+
   return (
-    <div className="fixed inset-0 bg-gray-100 overflow-hidden">
+    <div className="fixed inset-0 bg-white overflow-hidden" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       {/* Hidden audio element for notifications */}
       <audio ref={audioRef} preload="auto">
         <source src="/notification-sound.mp3" type="audio/mpeg" />
       </audio>
 
-      {/* Top Blue Banner */}
-      <div className="bg-blue-600 text-white px-8 py-5 flex items-center justify-between shadow-md">
-        <div className="flex items-center gap-4">
-          <div className={`h-3 w-3 rounded-full ${connected ? 'bg-green-300 animate-pulse' : 'bg-red-300'}`} />
-          <h1 className="text-4xl font-bold tracking-wide">{clinicName.toUpperCase()}</h1>
+      {/* Top Blue Header Bar - Solid Blue */}
+      <div className="bg-blue-600 text-white px-16 py-8 flex items-center justify-between shadow-lg">
+        <h1 className="text-6xl font-bold tracking-wider uppercase">
+          {clinicName}
+        </h1>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className={`h-3 w-3 rounded-full ${connected ? 'bg-green-300' : 'bg-red-300'}`} />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.location.href = '/secretaria/dashboard'}
+              className="p-3 hover:bg-blue-700 rounded-lg transition-all duration-200"
+              title="Voltar"
+              aria-label="Voltar"
+            >
+              <ArrowLeft className="h-6 w-6 text-white" />
+            </button>
+            <button
+              onClick={() => window.location.href = '/settings'}
+              className="p-3 hover:bg-blue-700 rounded-lg transition-all duration-200"
+              title="Configurações"
+              aria-label="Configurações"
+            >
+              <Settings className="h-6 w-6 text-white" />
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  if (document.fullscreenElement) {
+                    await document.exitFullscreen();
+                  } else {
+                    await document.documentElement.requestFullscreen();
+                  }
+                } catch (err) {
+                  console.log("Fullscreen not available:", err);
+                }
+              }}
+              className="p-3 hover:bg-blue-700 rounded-lg transition-all duration-200"
+              title="Tela Cheia"
+              aria-label="Tela Cheia"
+            >
+              <Maximize2 className="h-6 w-6 text-white" />
+            </button>
+          </div>
         </div>
-        <button
-          onClick={toggleFullscreen}
-          className="p-2 hover:bg-blue-700 rounded transition-colors opacity-70 hover:opacity-100"
-          title={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
-        >
-          {isFullscreen ? (
-            <Minimize2 className="h-5 w-5" />
-          ) : (
-            <Maximize2 className="h-5 w-5" />
-          )}
-        </button>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex h-[calc(100vh-80px)]">
-        {/* Left Side - Current Call (Main Display) - ~2/3 width */}
-        <div className="flex-[2] flex flex-col justify-center items-start px-16 py-12">
+      <div className="flex h-[calc(100vh-112px)] bg-white">
+        {/* Left Side - Patient Information (2/3 width) */}
+        <div className="flex-[2] flex flex-col justify-center items-start px-24 py-20">
           {currentCall ? (
-            <div className="w-full max-w-6xl space-y-10 animate-in fade-in duration-500">
+            <div className="w-full max-w-6xl space-y-20">
               {/* Patient Called Section */}
-              <div>
-                <p className="text-3xl font-semibold text-gray-900 mb-6">PACIENTE CHAMADO</p>
-                <h2 className="text-8xl font-bold text-blue-700 uppercase leading-tight">
+              <div className="space-y-3">
+                <p className="text-xl font-normal text-gray-400 tracking-wide uppercase">
+                  Paciente Chamado
+                </p>
+                <h2 className="text-8xl font-bold text-blue-600 uppercase leading-none tracking-tight">
                   {currentCall.patient_name || `PACIENTE #${currentCall.patient_id}`}
                 </h2>
               </div>
 
               {/* Professional Section */}
-              <div className="mt-12">
-                <p className="text-3xl font-semibold text-gray-900 mb-6">PROFISSIONAL</p>
-                <p className="text-6xl font-bold text-blue-700 uppercase leading-tight">
+              <div className="space-y-3">
+                <p className="text-xl font-normal text-gray-400 tracking-wide uppercase">
+                  Profissional
+                </p>
+                <p className="text-6xl font-bold text-blue-600 uppercase leading-tight tracking-tight">
                   {currentCall.doctor_name || `DR. #${currentCall.doctor_id}`}
                 </p>
               </div>
 
               {/* Service Location Section */}
-              <div className="mt-12">
-                <p className="text-3xl font-semibold text-gray-900 mb-6">LOCAL DE ATENDIMENTO</p>
-                <p className="text-5xl font-bold text-blue-700 uppercase">
-                  {currentCall.appointment_id && appointmentDetails[currentCall.appointment_id]?.room
-                    ? `SALA ${appointmentDetails[currentCall.appointment_id].room}`
-                    : getRoomCode(currentCall.doctor_id, currentCall.appointment_id)
-                      ? `SALA ${getRoomCode(currentCall.doctor_id, currentCall.appointment_id)}`
-                      : "CONSULTÓRIO"}
+              <div className="space-y-3">
+                <p className="text-xl font-normal text-gray-400 tracking-wide uppercase">
+                  Local de Atendimento
+                </p>
+                <p className="text-5xl font-bold text-blue-600 uppercase tracking-tight">
+                  {getLocationText()}
                 </p>
               </div>
             </div>
           ) : (
             <div className="w-full text-center">
-              <Phone className="h-40 w-40 text-gray-300 mx-auto mb-8" />
-              <p className="text-6xl text-gray-600 font-semibold mb-4">Aguardando Chamadas</p>
-              <p className="text-4xl text-gray-500">Nenhum paciente chamado no momento</p>
+              <Phone className="h-40 w-40 text-gray-300 mx-auto mb-10" />
+              <p className="text-6xl text-gray-400 font-semibold mb-6">Aguardando Chamadas</p>
+              <p className="text-3xl text-gray-400 font-light">Nenhum paciente chamado no momento</p>
             </div>
           )}
         </div>
 
-        {/* Right Side - Logo and Last Calls - ~1/3 width */}
-        <div className="flex-1 bg-gray-50 border-l-2 border-gray-300 px-8 py-8 overflow-y-auto">
-          {/* Logo Section */}
-          <div className="mb-8 flex justify-center">
-            <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+        {/* Right Side - Logo and Recent Calls (1/3 width) */}
+        <div className="flex-1 bg-gray-50 border-l-2 border-gray-200 px-12 py-16 flex flex-col">
+          {/* Municipal Logo Section - Centered */}
+          <div className="mb-12 flex justify-center items-center">
+            <div className="bg-white rounded-xl p-8 shadow-md border border-gray-200">
               <Image
                 src={"/Logo/Logotipo em Fundo Transparente.png"}
-                alt="Logo"
+                alt="Logo Municipal"
                 width={200}
                 height={200}
                 className="w-auto h-32 object-contain"
@@ -285,31 +321,45 @@ export default function SecretariaPainelPage() {
             </div>
           </div>
 
-          {/* Last Calls Section */}
-          <div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-6">ÚLTIMAS CHAMADAS</h3>
+          {/* Recent Calls Section */}
+          <div className="flex-1 flex flex-col">
+            <h3 className="text-2xl font-bold text-gray-700 mb-6 tracking-wide uppercase">
+              Últimas Chamadas
+            </h3>
             
             {lastCalls.length > 0 ? (
-              <div className="space-y-3">
-                {lastCalls.map((call, index) => (
-                  <div
-                    key={index}
-                    className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-center justify-between">
-                      <p className="text-xl font-bold text-blue-700">
-                        {call.patient_name.toUpperCase()}
-                      </p>
-                      <p className="text-lg font-semibold text-blue-500">
-                        {call.location}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-100 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                        Paciente
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                        Local
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lastCalls.slice(0, 10).map((call, index) => (
+                      <tr
+                        key={index}
+                        className="border-b border-gray-100 last:border-b-0 hover:bg-blue-50 transition-colors"
+                      >
+                        <td className="px-4 py-4 text-base font-semibold text-gray-900">
+                          {call.patient_name.toUpperCase()}
+                        </td>
+                        <td className="px-4 py-4 text-right text-base font-bold text-blue-600">
+                          {call.location}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : (
-              <div className="text-center py-12">
-                <p className="text-gray-500 text-lg">Nenhuma chamada recente</p>
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+                <p className="text-gray-400 text-lg font-light">Nenhuma chamada recente</p>
               </div>
             )}
           </div>
@@ -318,4 +368,3 @@ export default function SecretariaPainelPage() {
     </div>
   );
 }
-

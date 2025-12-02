@@ -4,7 +4,7 @@ import React, { useEffect } from "react";
 import { SecretarySidebar } from "@/components/secretaria/SecretarySidebar";
 import { AppHeader } from "@/components/app-header";
 import { useRequireAuth } from "@/contexts";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
 
 export default function SecretaryLayout({
@@ -14,6 +14,10 @@ export default function SecretaryLayout({
 }) {
   const { user, isLoading } = useRequireAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  
+  // Check if this is the painel (TV display) page - skip sidebar/header for full screen
+  const isPainelPage = pathname?.includes('/secretaria/painel');
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -78,6 +82,12 @@ export default function SecretaryLayout({
     );
   }
 
+  // For painel page, render without sidebar/header (full screen TV display)
+  if (isPainelPage) {
+    return <>{children}</>;
+  }
+
+  // For other secretary pages, render with sidebar and header
   return (
     <div className="flex min-h-screen w-full bg-gradient-to-br from-teal-50 to-cyan-50">
       <SecretarySidebar />
