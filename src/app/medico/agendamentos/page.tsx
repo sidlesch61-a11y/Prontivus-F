@@ -110,32 +110,26 @@ export default function AgendamentosPage() {
 
   useEffect(() => {
     loadAppointments();
-  }, [selectedDate, activeTab]);
+  }, [selectedDate]);
 
   useEffect(() => {
     filterAppointments();
-  }, [appointments, statusFilter, searchTerm, activeTab, selectedDate]);
+  }, [appointments, statusFilter, searchTerm]);
 
   const loadAppointments = async () => {
     try {
       setLoading(true);
       
-      // Calculate date range based on active tab
-      let startDate: Date;
-      let endDate: Date;
+      // Load a wide date range to support search functionality
+      // Load 3 months in the past and 6 months in the future
+      const today = new Date();
+      const startDate = new Date(today);
+      startDate.setMonth(startDate.getMonth() - 3);
+      startDate.setHours(0, 0, 0, 0);
       
-      if (activeTab === "day") {
-        startDate = new Date(selectedDate);
-        startDate.setHours(0, 0, 0, 0);
-        endDate = new Date(selectedDate);
-        endDate.setHours(23, 59, 59, 999);
-      } else if (activeTab === "week") {
-        startDate = startOfWeek(selectedDate, { locale: ptBR });
-        endDate = endOfWeek(selectedDate, { locale: ptBR });
-      } else {
-        startDate = startOfMonth(selectedDate);
-        endDate = endOfMonth(selectedDate);
-      }
+      const endDate = new Date(today);
+      endDate.setMonth(endDate.getMonth() + 6);
+      endDate.setHours(23, 59, 59, 999);
       
       // Build query params
       const params = new URLSearchParams({
@@ -172,7 +166,7 @@ export default function AgendamentosPage() {
       filtered = filtered.filter(apt => apt.status === statusFilter);
     }
     
-    // Filter by search term
+    // Filter by search term (patient name, appointment type, or reason)
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase();
       filtered = filtered.filter(apt =>
@@ -180,15 +174,6 @@ export default function AgendamentosPage() {
         apt.appointment_type?.toLowerCase().includes(search) ||
         apt.reason?.toLowerCase().includes(search)
       );
-    }
-    
-    // Filter by date for day view
-    if (activeTab === "day") {
-      const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
-      filtered = filtered.filter(apt => {
-        const aptDate = format(parseISO(apt.scheduled_datetime), "yyyy-MM-dd");
-        return aptDate === selectedDateStr;
-      });
     }
     
     setFilteredAppointments(filtered);
@@ -488,423 +473,59 @@ export default function AgendamentosPage() {
         </Button>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Buscar por paciente, tipo ou motivo..."
-                  className="pl-10"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
+      {/* Calendar View */}
+      <Card className="overflow-hidden border-0 shadow-xl">
+        <CardContent className="p-6">
+          {/* Patient Search within Calendar */}
+          <div className="mb-4">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Buscar Paciente"
+                className="pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
-            <div className="min-w-[150px]">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filtrar por status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os Status</SelectItem>
-                  <SelectItem value="scheduled">Agendado</SelectItem>
-                  <SelectItem value="confirmed">Confirmado</SelectItem>
-                  <SelectItem value="checked_in">Check-in</SelectItem>
-                  <SelectItem value="in_consultation">Em Consulta</SelectItem>
-                  <SelectItem value="completed">Concluído</SelectItem>
-                  <SelectItem value="cancelled">Cancelado</SelectItem>
-                  <SelectItem value="no_show">Não Compareceu</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {activeTab === "day" && (
+          </div>
+          
+          <MedicalCalendar
+            events={calendarEvents}
+            onSelectEvent={handleCalendarEventSelect}
+            onSelectSlot={handleCalendarSlotSelect}
+            defaultView="week"
+            className="rounded-2xl"
+          />
+          
+          {/* Legend */}
+          <div className="mt-6 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="text-sm font-semibold text-gray-700 mr-2">Legenda:</div>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => navigateDate("prev")}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Input
-                  type="date"
-                  value={format(selectedDate, "yyyy-MM-dd")}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      setSelectedDate(new Date(e.target.value));
-                    }
-                  }}
-                  className="w-[150px]"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => navigateDate("next")}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-                {isToday(selectedDate) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedDate(new Date())}
-                  >
-                    Hoje
-                  </Button>
-                )}
+                <div className="w-4 h-4 rounded bg-gradient-to-r from-blue-500 to-blue-600 shadow-md"></div>
+                <span className="text-sm text-gray-600">Consulta</span>
               </div>
-            )}
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-gradient-to-r from-purple-500 to-purple-600 shadow-md"></div>
+                <span className="text-sm text-gray-600">Procedimento</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-md"></div>
+                <span className="text-sm text-gray-600">Retorno</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-gradient-to-r from-red-500 to-red-600 shadow-md"></div>
+                <span className="text-sm text-gray-600">Emergência</span>
+              </div>
+              <div className="flex items-center gap-2 ml-4">
+                <div className="w-4 h-4 rounded-full bg-red-500 animate-pulse"></div>
+                <span className="text-sm text-gray-600">Urgente</span>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="calendar" className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            Calendário
-          </TabsTrigger>
-          <TabsTrigger value="day" className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Dia
-          </TabsTrigger>
-          <TabsTrigger value="week" className="flex items-center gap-2">
-            <CalendarRange className="h-4 w-4" />
-            Semana
-          </TabsTrigger>
-          <TabsTrigger value="month" className="flex items-center gap-2">
-            <CalendarDays className="h-4 w-4" />
-            Mês
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Calendar View */}
-        <TabsContent value="calendar">
-          <Card className="overflow-hidden border-0 shadow-xl">
-            <CardHeader className="bg-gradient-to-r from-green-50 via-emerald-50 to-green-50 border-b border-green-100">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                    <CalendarDays className="h-6 w-6 text-green-600" />
-                    Calendário de Agendamentos
-                  </CardTitle>
-                  <CardDescription className="text-gray-600 mt-1">
-                    Visualize e gerencie seus agendamentos em formato de calendário interativo
-                  </CardDescription>
-                </div>
-                <Badge variant="outline" className="text-sm px-4 py-2 bg-white border-green-200 text-green-700 font-semibold shadow-sm">
-                  {calendarEvents.length} {calendarEvents.length === 1 ? 'agendamento' : 'agendamentos'}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-6">
-              <MedicalCalendar
-                events={calendarEvents}
-                onSelectEvent={handleCalendarEventSelect}
-                onSelectSlot={handleCalendarSlotSelect}
-                defaultView="week"
-                className="rounded-2xl"
-              />
-              
-              {/* Legend */}
-              <div className="mt-6 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="text-sm font-semibold text-gray-700 mr-2">Legenda:</div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded bg-gradient-to-r from-blue-500 to-blue-600 shadow-md"></div>
-                    <span className="text-sm text-gray-600">Consulta</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded bg-gradient-to-r from-purple-500 to-purple-600 shadow-md"></div>
-                    <span className="text-sm text-gray-600">Procedimento</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-md"></div>
-                    <span className="text-sm text-gray-600">Retorno</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded bg-gradient-to-r from-red-500 to-red-600 shadow-md"></div>
-                    <span className="text-sm text-gray-600">Emergência</span>
-                  </div>
-                  <div className="flex items-center gap-2 ml-4">
-                    <div className="w-4 h-4 rounded-full bg-red-500 animate-pulse"></div>
-                    <span className="text-sm text-gray-600">Urgente</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Day View */}
-        <TabsContent value="day">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Agenda do Dia</CardTitle>
-                  <CardDescription>
-                    {format(selectedDate, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-sm">
-                    {getDayAppointments().length} {getDayAppointments().length === 1 ? 'consulta' : 'consultas'}
-                  </Badge>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {getDayAppointments().length > 0 ? (
-                <div className="space-y-3">
-                  {getDayAppointments().map((appointment) => {
-                    const aptDate = parseISO(appointment.scheduled_datetime);
-                    const isPastAppointment = isPast(aptDate) && !isToday(aptDate);
-                    
-                    return (
-                      <div
-                        key={appointment.id}
-                        className={`flex items-center justify-between p-4 border rounded-lg transition-all ${
-                          isPastAppointment ? 'bg-gray-50 opacity-75' : 'hover:bg-gray-50 hover:shadow-sm'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4 flex-1">
-                          <div className={`w-16 h-16 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                            isPastAppointment ? 'bg-gray-200' : 'bg-green-100'
-                          }`}>
-                            <Clock className={`h-8 w-8 ${isPastAppointment ? 'text-gray-600' : 'text-green-600'}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-3 mb-1">
-                              <div className="font-semibold text-lg">{formatTime(appointment.scheduled_datetime)}</div>
-                              {getStatusBadge(appointment.status)}
-                            </div>
-                            <div className="text-sm text-gray-900 font-medium flex items-center gap-2 mt-1">
-                              <User className="h-4 w-4" />
-                              {appointment.patient_name}
-                            </div>
-                            {appointment.appointment_type && (
-                              <div className="text-sm text-gray-600 flex items-center gap-2 mt-1">
-                                <Stethoscope className="h-4 w-4" />
-                                {appointment.appointment_type}
-                              </div>
-                            )}
-                            {appointment.reason && (
-                              <div className="text-xs text-gray-500 mt-1 truncate">
-                                {appointment.reason}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleViewDetails(appointment.id)}
-                          >
-                            <FileText className="h-4 w-4" />
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              {canUpdateStatus(appointment, "checked_in") && (
-                                <DropdownMenuItem onClick={() => handleStatusAction(appointment, "checked_in")}>
-                                  <CheckSquare className="h-4 w-4 mr-2" />
-                                  Fazer Check-in
-                                </DropdownMenuItem>
-                              )}
-                              {canUpdateStatus(appointment, "in_consultation") && (
-                                <DropdownMenuItem onClick={() => handleStatusAction(appointment, "in_consultation")}>
-                                  <Play className="h-4 w-4 mr-2" />
-                                  Iniciar Consulta
-                                </DropdownMenuItem>
-                              )}
-                              {canUpdateStatus(appointment, "completed") && (
-                                <DropdownMenuItem onClick={() => handleStatusAction(appointment, "completed")}>
-                                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                                  Finalizar Consulta
-                                </DropdownMenuItem>
-                              )}
-                              {canUpdateStatus(appointment, "cancelled") && (
-                                <DropdownMenuItem onClick={() => handleCancel(appointment)}>
-                                  <XCircle className="h-4 w-4 mr-2" />
-                                  Cancelar
-                                </DropdownMenuItem>
-                              )}
-                              {!isPastAppointment && appointment.status !== "cancelled" && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={() => handleReschedule(appointment)}>
-                                    <Edit className="h-4 w-4 mr-2" />
-                                    Reagendar
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem asChild>
-                                <Link href={`/medico/atendimento/${appointment.id}`}>
-                                  <FileText className="h-4 w-4 mr-2" />
-                                  Ver Detalhes
-                                </Link>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-center py-12 text-gray-500">
-                  <CalendarDays className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                  <p className="font-medium">Nenhuma consulta agendada para este dia</p>
-                  <p className="text-sm mt-2">Suas consultas aparecerão aqui</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Week View */}
-        <TabsContent value="week">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Agenda da Semana</CardTitle>
-                  <CardDescription>
-                    Visão semanal dos agendamentos
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => navigateDate("prev")}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-sm font-medium min-w-[200px] text-center">
-                    {format(startOfWeek(selectedDate, { locale: ptBR }), "dd/MM", { locale: ptBR })} - {format(endOfWeek(selectedDate, { locale: ptBR }), "dd/MM/yyyy", { locale: ptBR })}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => navigateDate("next")}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
-                {getWeekAppointments().map((day, index) => (
-                  <Card key={index} className={`${isToday(day.dateObj) ? 'border-green-500 border-2' : ''}`}>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm capitalize">{day.date}</CardTitle>
-                      <CardDescription className="text-xs">
-                        {format(day.dateObj, "dd/MM", { locale: ptBR })}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-green-600 mb-2">{day.appointments.length}</div>
-                      <div className="text-xs text-gray-500 mb-3">{day.appointments.length === 1 ? 'consulta' : 'consultas'}</div>
-                      {day.appointments.length > 0 && (
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {day.appointments.slice(0, 3).map((apt) => (
-                            <div
-                              key={apt.id}
-                              className="text-xs p-2 bg-gray-50 rounded border cursor-pointer hover:bg-gray-100"
-                              onClick={() => handleViewDetails(apt.id)}
-                            >
-                              <div className="font-medium">{formatTime(apt.scheduled_datetime)}</div>
-                              <div className="text-gray-600 truncate">{apt.patient_name}</div>
-                              {getStatusBadge(apt.status)}
-                            </div>
-                          ))}
-                          {day.appointments.length > 3 && (
-                            <div className="text-xs text-gray-500 text-center">
-                              +{day.appointments.length - 3} mais
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Month View */}
-        <TabsContent value="month">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Agenda do Mês</CardTitle>
-                  <CardDescription>
-                    {format(selectedDate, "MMMM 'de' yyyy", { locale: ptBR })}
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => navigateDate("prev")}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedDate(new Date())}
-                  >
-                    Hoje
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => navigateDate("next")}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {getMonthAppointments().map((week, index) => (
-                  <Card key={index} className="text-center">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Semana {index + 1}</CardTitle>
-                      <CardDescription className="text-xs">
-                        {format(week.weekStart, "dd/MM", { locale: ptBR })} - {format(week.weekEnd, "dd/MM", { locale: ptBR })}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-green-600">{week.appointments}</div>
-                      <div className="text-xs text-gray-500 mt-1">{week.appointments === 1 ? 'consulta' : 'consultas'}</div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
 
       {/* Appointment Details Dialog */}
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
